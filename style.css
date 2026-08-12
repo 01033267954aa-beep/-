@@ -388,8 +388,7 @@ p {
   animation: customerEnter 360ms ease both;
 }
 
-.customer button,
-.cat button {
+.customer button {
   display: grid;
   justify-items: center;
   gap: 2px;
@@ -477,31 +476,122 @@ p {
 }
 
 .cat {
-  width: 70px;
-  min-height: 74px;
+  --cat-face: 1;
+  width: clamp(76px, 7.2vw, 108px);
+  min-height: clamp(78px, 7.4vw, 112px);
   z-index: 10;
   pointer-events: auto;
   will-change: left, top;
 }
 
+.cat.facing-left {
+  --cat-face: -1;
+}
+
 .cat button {
-  background: rgba(255, 253, 247, 0.84);
+  position: relative;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 0;
+  width: 100%;
+  min-height: 100%;
+  padding: 2px 4px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  touch-action: manipulation;
+}
+
+.cat button:focus-visible {
+  outline: 3px solid rgba(239, 124, 88, 0.5);
+  outline-offset: 6px;
+  border-radius: 999px;
 }
 
 .cat button:active .cat-emoji {
-  transform: scale(1.08);
+  transform: scaleX(var(--cat-face)) scale(1.08);
+}
+
+.cat-sprite {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: clamp(58px, 6.4vw, 88px);
+  transform-origin: 50% 84%;
+  will-change: transform;
 }
 
 .cat-emoji {
-  font-size: 2.1rem;
+  font-size: clamp(3rem, 5vw, 4.55rem);
   line-height: 1;
+  transform: scaleX(var(--cat-face));
   transition: transform 140ms ease;
 }
 
+.cat.cat-walking .cat-sprite {
+  animation: catWalk 960ms ease-in-out infinite;
+}
+
+.cat.cat-sitting .cat-sprite {
+  animation: catSit 2400ms ease-in-out infinite;
+}
+
+.cat.cat-sleeping .cat-sprite {
+  animation: catSleep 2600ms ease-in-out infinite;
+}
+
+.cat.cat-looking .cat-sprite {
+  animation: catLook 1500ms ease-in-out infinite;
+}
+
+.cat-name {
+  margin-top: -5px;
+  color: rgba(92, 64, 42, 0.74);
+  font-size: clamp(0.62rem, 0.9vw, 0.74rem);
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+  text-shadow: 0 1px 0 rgba(255, 253, 247, 0.72);
+  pointer-events: none;
+}
+
+.cat.cat-walking .cat-name,
+.cat.cat-sleeping .cat-name {
+  opacity: 0.58;
+}
+
 .cat-cooldown {
-  color: var(--muted);
-  font-size: 0.68rem;
-  min-height: 16px;
+  position: absolute;
+  top: 0;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  min-height: 20px;
+  padding: 0 6px;
+  border: 1px solid rgba(107, 75, 52, 0.14);
+  border-radius: 999px;
+  color: var(--coffee);
+  background: rgba(255, 253, 247, 0.86);
+  font-size: 0.66rem;
+  font-weight: 900;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.cat-sleep {
+  position: absolute;
+  top: -14px;
+  right: 10px;
+  z-index: 2;
+  font-size: clamp(1rem, 1.9vw, 1.45rem);
+  line-height: 1;
+  pointer-events: none;
+  animation: sleepBubble 2200ms ease-in-out infinite;
 }
 
 .furniture-prop {
@@ -670,8 +760,7 @@ p {
 .upgrade-button:active,
 .icon-button:active,
 .coffee-machine:active,
-.customer button:active,
-.cat button:active {
+.customer button:active {
   transform: translateY(2px) scale(0.99);
 }
 
@@ -867,23 +956,32 @@ p {
 
 .toast-root {
   position: fixed;
-  right: 16px;
-  bottom: 16px;
+  right: 14px;
+  bottom: 14px;
   z-index: 100;
   display: grid;
-  gap: 8px;
-  width: min(340px, calc(100% - 32px));
+  justify-items: end;
+  gap: 6px;
+  width: auto;
+  max-width: min(300px, calc(100% - 32px));
   pointer-events: none;
 }
 
 .toast {
-  padding: 12px 14px;
-  border-radius: var(--radius);
+  max-width: 300px;
+  padding: 8px 10px;
+  border-radius: 8px;
   color: var(--coffee);
   background: rgba(255, 253, 247, 0.95);
   border: 1px solid var(--line);
-  box-shadow: var(--soft-shadow);
-  animation: toastIn 260ms ease both;
+  box-shadow: 0 8px 18px rgba(94, 67, 43, 0.13);
+  font-size: 0.82rem;
+  line-height: 1.35;
+  animation: toastIn 220ms ease both;
+}
+
+.toast.leaving {
+  animation: toastOut 240ms ease forwards;
 }
 
 .level-up {
@@ -988,6 +1086,64 @@ p {
   }
 }
 
+@keyframes catWalk {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-1deg);
+  }
+  35% {
+    transform: translateY(-5px) rotate(2deg);
+  }
+  70% {
+    transform: translateY(1px) rotate(-2deg);
+  }
+}
+
+@keyframes catSit {
+  0%,
+  100% {
+    transform: translateY(0) scaleY(0.98);
+  }
+  50% {
+    transform: translateY(1px) scaleY(1);
+  }
+}
+
+@keyframes catSleep {
+  0%,
+  100% {
+    transform: translateY(0) scale(0.98);
+  }
+  50% {
+    transform: translateY(2px) scale(1);
+  }
+}
+
+@keyframes catLook {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg);
+  }
+  45% {
+    transform: translateY(-1px) rotate(2deg);
+  }
+}
+
+@keyframes sleepBubble {
+  0% {
+    opacity: 0;
+    transform: translate(-20%, 6px) scale(0.82);
+  }
+  20%,
+  70% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-20%, -18px) scale(1.05);
+  }
+}
+
 @keyframes cupPulse {
   0%,
   100% {
@@ -1006,6 +1162,17 @@ p {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes toastOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px);
   }
 }
 
@@ -1064,7 +1231,10 @@ p {
   }
 
   .toast-root {
+    left: 16px;
+    right: 16px;
     bottom: calc(var(--bottom-nav-height) + 26px + env(safe-area-inset-bottom));
+    max-width: none;
   }
 }
 
@@ -1176,23 +1346,54 @@ p {
     min-height: 78px;
   }
 
-  .customer-emoji,
-  .cat-emoji {
+  .customer-emoji {
     font-size: 1.8rem;
   }
 
   .cat {
-    width: 62px;
-    min-height: 68px;
+    width: 68px;
+    min-height: 72px;
   }
 
-  .customer-name,
-  .cat-name {
+  .cat-sprite {
+    min-height: 54px;
+  }
+
+  .cat-emoji {
+    font-size: clamp(2.45rem, 12vw, 3.2rem);
+  }
+
+  .customer-name {
     font-size: 0.68rem;
+  }
+
+  .cat-name {
+    font-size: 0.6rem;
+  }
+
+  .cat-cooldown {
+    top: -1px;
+    right: 2px;
+    min-width: 24px;
+    min-height: 18px;
+    padding: 0 5px;
+    font-size: 0.6rem;
+  }
+
+  .cat-sleep {
+    top: -12px;
+    right: 4px;
   }
 
   .customer-hint {
     font-size: 0.61rem;
+  }
+
+  .toast {
+    max-width: min(290px, 100%);
+    padding: 7px 9px;
+    border-radius: 7px;
+    font-size: 0.78rem;
   }
 
   .shop-grid,

@@ -7,6 +7,20 @@ const MAX_TABLES = 8;
 const MAX_READY_DRINKS = 3;
 const AUTO_SAVE_MS = 30000;
 const INPUT_LOCK_MS = 280;
+const CONFIG = {
+  customerSpawnMin: 4800,
+  customerSpawnMax: 6800,
+  minimumSpawnDelay: 1800,
+  fullCafeRetryDelay: 2400,
+  toastDuration: 2100,
+  maxToasts: 3,
+  catBounds: {
+    minX: 18,
+    maxX: 84,
+    minY: 56,
+    maxY: 86
+  }
+};
 
 const GAME_DATA = {
   cats: {
@@ -14,6 +28,7 @@ const GAME_DATA = {
       id: "cheese",
       name: "치즈냥",
       emoji: "🐱",
+      image: "./assets/cats/cheese-cat.webp",
       price: 0,
       effect: "손님 만족도 +5%",
       satisfactionBonus: 0.05
@@ -22,6 +37,7 @@ const GAME_DATA = {
       id: "black",
       name: "검은냥",
       emoji: "🐈‍⬛",
+      image: "./assets/cats/black-cat.webp",
       price: 820,
       effect: "팁 획득 확률 +18%",
       tipChanceBonus: 0.18
@@ -30,6 +46,7 @@ const GAME_DATA = {
       id: "siamese",
       name: "샴냥",
       emoji: "🐈",
+      image: "./assets/cats/siamese-cat.webp",
       price: 980,
       effect: "음료 판매 금액 +12%",
       revenueBonus: 0.12
@@ -38,6 +55,7 @@ const GAME_DATA = {
       id: "chubby",
       name: "뚱냥",
       emoji: "😺",
+      image: "./assets/cats/chubby-cat.webp",
       price: 1180,
       effect: "손님 방문 속도 +14%",
       visitSpeedMultiplier: 0.86
@@ -465,13 +483,17 @@ function renderCats() {
     const actor = runtime.catActors[catId];
     if (!cat || !actor) return "";
     const cooldownLeft = Math.max(0, Math.ceil((actor.cooldownUntil - performance.now()) / 1000));
-    const cooldownText = cooldownLeft > 0 ? `${cooldownLeft}s` : "쓰다듬기";
+    const cooldownText = cooldownLeft > 0 ? `<span class="cat-cooldown">${cooldownLeft}s</span>` : "";
+    const sleepMark = actor.mode === "sleeping" ? `<span class="cat-sleep" aria-hidden="true">💤</span>` : "";
     return `
-      <div class="cat" style="left:${actor.x}%; top:${actor.y}%;" data-cat-id="${cat.id}">
+      <div class="cat cat-${actor.mode} facing-${actor.direction}" style="left:${actor.x}%; top:${actor.y}%;" data-cat-id="${cat.id}">
         <button type="button" aria-label="${cat.name} 쓰다듬기">
-          <span class="cat-emoji" aria-hidden="true">${cat.emoji}</span>
+          ${sleepMark}
+          <span class="cat-sprite" data-image="${cat.image}" aria-hidden="true">
+            <span class="cat-emoji">${cat.emoji}</span>
+          </span>
           <span class="cat-name">${cat.name}</span>
-          <span class="cat-cooldown">${cooldownText}</span>
+          ${cooldownText}
         </button>
       </div>
     `;
@@ -705,13 +727,13 @@ function completePayment(customer, timestamp) {
 
 function maybeSpawnCustomer(timestamp) {
   if (timestamp < runtime.nextCustomerAt) return;
-  spawnCustomer();
-  runtime.nextCustomerAt = timestamp + getCustomerInterval();
+  const spawned = spawnCustomer();
+  runtime.nextCustomerAt = timestamp + (spawned ? getCustomerInterval() : CONFIG.fullCafeRetryDelay);
 }
 
 function spawnCustomer() {
   const openTable = findOpenTableIndex();
-  if (openTable === -1) return;
+  if (openTable === -1) return false;
 
   const order = pick(GAME_DATA.orders);
   const lucky = runtime.luckyNextCustomer || Math.random() < 0.06;
@@ -730,6 +752,7 @@ function spawnCustomer() {
   renderCustomers();
   renderHud();
   showToast(lucky ? "행운의 손님이 도착했습니다." : "새 손님이 테이블에 앉았습니다.");
+  return true;
 }
 
 function findOpenTableIndex() {
@@ -787,13 +810,16 @@ function initializeCats() {
 }
 
 function createCatActor(catId) {
+  const bounds = CONFIG.catBounds;
   runtime.catActors[catId] = {
-    x: randomBetween(24, 76),
-    y: randomBetween(58, 84),
-    targetX: randomBetween(24, 76),
-    targetY: randomBetween(58, 84),
-    speed: randomBetween(0.0015, 0.0025),
-    nextMoveAt: performance.now() + randomBetween(2200, 4600),
+    x: randomBetween(bounds.minX + 6, bounds.maxX - 6),
+    y: randomBetween(bounds.minY + 2, bounds.maxY - 3),
+    targetX: randomBetween(bounds.minX + 6, bounds.maxX - 6),
+    targetY: randomBetween(bounds.minY + 2, bounds.maxY - 3),
+    speed: randomBetween(0.0011, 0.0019),
+    mode: "resting",
+    modeUntil: performance.now() + randomBetween(1800, 4200),
+    direction: "right",
     cooldownUntil: 0
   };
 }
@@ -804,17 +830,63 @@ function updateCatMovement(timestamp) {
     const actor = runtime.catActors[node.dataset.catId];
     if (!actor) return;
 
-    if (timestamp >= actor.nextMoveAt) {
-      actor.targetX = randomBetween(20, 82);
-      actor.targetY = randomBetween(57, 86);
-      actor.nextMoveAt = timestamp + randomBetween(6800, 11000);
+    if (timestamp >= actor.modeUntil) {
+      chooseNextCatBehavior(actor, timestamp);
     }
 
-    actor.x += (actor.targetX - actor.x) * actor.speed * 16;
-    actor.y += (actor.targetY - actor.y) * actor.speed * 16;
+    if (actor.mode === "walking") {
+      const dx = actor.targetX - actor.x;
+      const dy = actor.targetY - actor.y;
+      if (Math.abs(dx) > 0.18) {
+        actor.direction = dx < 0 ? "left" : "right";
+      }
+      actor.x += dx * actor.speed * 16;
+      actor.y += dy * actor.speed * 16;
+
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) {
+        chooseNextCatBehavior(actor, timestamp, "resting");
+      }
+    }
+
     node.style.left = `${actor.x}%`;
     node.style.top = `${actor.y}%`;
+    node.className = `cat cat-${actor.mode} facing-${actor.direction}`;
   });
+}
+
+function chooseNextCatBehavior(actor, timestamp, forcedMode) {
+  const bounds = CONFIG.catBounds;
+  const mode = forcedMode || pickWeighted([
+    ["walking", 0.38],
+    ["resting", 0.24],
+    ["sitting", 0.2],
+    ["sleeping", 0.1],
+    ["looking", 0.08]
+  ]);
+
+  actor.mode = mode;
+
+  if (mode === "walking") {
+    actor.targetX = randomBetween(bounds.minX, bounds.maxX);
+    actor.targetY = randomBetween(bounds.minY, bounds.maxY);
+    actor.speed = randomBetween(0.001, 0.0018);
+    actor.direction = actor.targetX < actor.x ? "left" : "right";
+    actor.modeUntil = timestamp + randomBetween(5200, 9200);
+    return;
+  }
+
+  const durationByMode = {
+    resting: [2300, 5200],
+    sitting: [3200, 6800],
+    sleeping: [4200, 7800],
+    looking: [1800, 3600]
+  };
+  const [minDuration, maxDuration] = durationByMode[mode] || durationByMode.resting;
+  actor.modeUntil = timestamp + randomBetween(minDuration, maxDuration);
+
+  if (mode === "looking" && Math.random() < 0.55) {
+    actor.direction = actor.direction === "left" ? "right" : "left";
+  }
 }
 
 function handleCatClick(event) {
@@ -1059,7 +1131,8 @@ function getCustomerInterval() {
   const upgradeMultiplier = Math.pow(0.9, state.upgrades.visitSpeed - 1);
   const catMultiplier = getOwnedBonus("visitSpeedMultiplier", true);
   const influencerMultiplier = performance.now() < runtime.influencerUntil ? 0.55 : 1;
-  return Math.max(2200, 7200 * upgradeMultiplier * catMultiplier * influencerMultiplier);
+  const baseDelay = randomBetween(CONFIG.customerSpawnMin, CONFIG.customerSpawnMax);
+  return Math.max(CONFIG.minimumSpawnDelay, baseDelay * upgradeMultiplier * catMultiplier * influencerMultiplier);
 }
 
 function calculateReward(customer) {
@@ -1193,7 +1266,7 @@ function exposeDebugTools() {
 
 function showToast(message) {
   if (!els.toastRoot) return;
-  while (els.toastRoot.children.length >= 4) {
+  while (els.toastRoot.children.length >= CONFIG.maxToasts) {
     els.toastRoot.children[0].remove();
   }
   const toast = document.createElement("div");
@@ -1201,8 +1274,9 @@ function showToast(message) {
   toast.textContent = message;
   els.toastRoot.appendChild(toast);
   window.setTimeout(() => {
-    toast.remove();
-  }, 3300);
+    toast.classList.add("leaving");
+    window.setTimeout(() => toast.remove(), 240);
+  }, CONFIG.toastDuration);
 }
 
 function showLevelUp() {
@@ -1262,6 +1336,16 @@ function randomBetween(min, max) {
 
 function pick(items) {
   return items[Math.floor(Math.random() * items.length)];
+}
+
+function pickWeighted(entries) {
+  const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
+  let roll = Math.random() * total;
+  for (const [value, weight] of entries) {
+    roll -= weight;
+    if (roll <= 0) return value;
+  }
+  return entries[entries.length - 1][0];
 }
 
 function clamp(value, min, max) {
