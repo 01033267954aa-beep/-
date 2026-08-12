@@ -477,8 +477,8 @@ p {
 
 .cat {
   --cat-face: 1;
-  width: clamp(76px, 7.2vw, 108px);
-  min-height: clamp(78px, 7.4vw, 112px);
+  width: clamp(88px, 8vw, 126px);
+  min-height: clamp(76px, 6.8vw, 104px);
   z-index: 10;
   pointer-events: auto;
   will-change: left, top;
@@ -511,29 +511,188 @@ p {
   border-radius: 999px;
 }
 
-.cat button:active .cat-emoji {
-  transform: scaleX(var(--cat-face)) scale(1.08);
+.cat button:active .cat-art,
+.cat button:active .cat-body-fallback {
+  transform: scaleX(var(--cat-face)) scale(1.04);
 }
 
 .cat-sprite {
   position: relative;
   display: grid;
-  place-items: center;
+  place-items: end center;
   width: 100%;
-  min-height: clamp(58px, 6.4vw, 88px);
+  min-height: clamp(58px, 6vw, 82px);
   transform-origin: 50% 84%;
   will-change: transform;
 }
 
-.cat-emoji {
-  font-size: clamp(3rem, 5vw, 4.55rem);
-  line-height: 1;
+.cat-art {
+  display: block;
+  width: 100%;
+  height: clamp(54px, 5.7vw, 82px);
+  object-fit: contain;
   transform: scaleX(var(--cat-face));
   transition: transform 140ms ease;
 }
 
+.cat-art.failed {
+  display: none;
+}
+
+.cat-body-fallback {
+  --fur: #d98a3a;
+  --fur-dark: #a76535;
+  --fur-light: #f2b56a;
+  --nose: #7a4530;
+  position: relative;
+  display: none;
+  width: 88%;
+  height: clamp(48px, 5.2vw, 68px);
+  transform: scaleX(var(--cat-face));
+  transform-origin: 50% 78%;
+  transition: transform 140ms ease;
+}
+
+.cat-art.failed + .cat-body-fallback {
+  display: block;
+}
+
+.cat-body-black {
+  --fur: #2f2d32;
+  --fur-dark: #16161a;
+  --fur-light: #5a565f;
+  --nose: #f3b5a9;
+}
+
+.cat-body-siamese {
+  --fur: #dcc4a3;
+  --fur-dark: #5b4439;
+  --fur-light: #f0d9b8;
+  --nose: #5b4439;
+}
+
+.cat-body-chubby {
+  --fur: #d6a262;
+  --fur-dark: #986534;
+  --fur-light: #f0c078;
+  --nose: #835131;
+}
+
+.cat-body,
+.cat-head,
+.cat-tail,
+.cat-leg,
+.cat-ear,
+.cat-eye {
+  position: absolute;
+  display: block;
+}
+
+.cat-body {
+  left: 24%;
+  bottom: 15%;
+  width: 49%;
+  height: 42%;
+  border-radius: 58% 48% 46% 54%;
+  background: linear-gradient(145deg, var(--fur-light), var(--fur) 58%, var(--fur-dark));
+}
+
+.cat-head {
+  right: 13%;
+  bottom: 36%;
+  width: 28%;
+  height: 37%;
+  border-radius: 48% 50% 45% 48%;
+  background: linear-gradient(145deg, var(--fur-light), var(--fur) 62%, var(--fur-dark));
+}
+
+.cat-head::after {
+  content: "";
+  position: absolute;
+  right: 8%;
+  bottom: 36%;
+  width: 13%;
+  height: 10%;
+  border-radius: 50%;
+  background: var(--nose);
+}
+
+.cat-ear {
+  top: -22%;
+  width: 34%;
+  height: 38%;
+  clip-path: polygon(50% 0, 0 100%, 100% 100%);
+  background: var(--fur-dark);
+}
+
+.ear-left {
+  left: 12%;
+  transform: rotate(-12deg);
+}
+
+.ear-right {
+  right: 10%;
+  transform: rotate(18deg);
+}
+
+.cat-eye {
+  top: 40%;
+  width: 8%;
+  height: 10%;
+  border-radius: 50%;
+  background: #302218;
+}
+
+.eye-left {
+  right: 43%;
+}
+
+.eye-right {
+  right: 22%;
+}
+
+.cat-tail {
+  left: 5%;
+  bottom: 39%;
+  width: 34%;
+  height: 12%;
+  border-radius: 999px 20px 20px 999px;
+  background: linear-gradient(90deg, var(--fur-dark), var(--fur));
+  transform: rotate(-22deg);
+  transform-origin: 94% 50%;
+}
+
+.cat-leg {
+  bottom: 3%;
+  width: 8%;
+  height: 24%;
+  border-radius: 999px;
+  background: var(--fur-dark);
+  transform-origin: 50% 0;
+}
+
+.leg-front {
+  right: 28%;
+}
+
+.leg-back {
+  left: 34%;
+}
+
 .cat.cat-walking .cat-sprite {
-  animation: catWalk 960ms ease-in-out infinite;
+  animation: catWalk 1080ms ease-in-out infinite;
+}
+
+.cat.cat-walking .cat-tail {
+  animation: tailSwing 720ms ease-in-out infinite;
+}
+
+.cat.cat-walking .leg-front {
+  animation: frontStep 540ms ease-in-out infinite;
+}
+
+.cat.cat-walking .leg-back {
+  animation: backStep 540ms ease-in-out infinite;
 }
 
 .cat.cat-sitting .cat-sprite {
@@ -546,6 +705,34 @@ p {
 
 .cat.cat-looking .cat-sprite {
   animation: catLook 1500ms ease-in-out infinite;
+}
+
+.cat.cat-petting .cat-sprite {
+  animation: catPet 900ms ease-out both;
+}
+
+.cat.cat-sitting .cat-body-fallback {
+  height: clamp(42px, 4.6vw, 60px);
+}
+
+.cat.cat-sitting .cat-tail {
+  left: 8%;
+  bottom: 24%;
+  transform: rotate(-38deg);
+}
+
+.cat.cat-sleeping .cat-body-fallback {
+  height: clamp(40px, 4.4vw, 58px);
+}
+
+.cat.cat-sleeping .cat-head {
+  right: 18%;
+  bottom: 23%;
+}
+
+.cat.cat-sleeping .cat-tail {
+  bottom: 20%;
+  transform: rotate(-6deg);
 }
 
 .cat-name {
@@ -866,6 +1053,246 @@ p {
   width: min(920px, 100%);
 }
 
+.coffee-panel {
+  width: min(620px, 100%);
+}
+
+.mini-subtitle {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.coffee-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid rgba(185, 65, 57, 0.22);
+  border-radius: var(--radius);
+  color: var(--coffee);
+  background: #fff4ef;
+  font-weight: 800;
+}
+
+.coffee-confirm div {
+  display: flex;
+  gap: 8px;
+}
+
+.brew-station {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 170px;
+  margin: 14px 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background:
+    radial-gradient(circle at 50% 115%, rgba(207, 141, 85, 0.2) 0 38%, transparent 39%),
+    linear-gradient(180deg, #fff7e7, #f2d0a1);
+}
+
+.brew-machine {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 150px;
+  height: 150px;
+}
+
+.brew-machine-top {
+  position: absolute;
+  top: 12px;
+  width: 96px;
+  height: 64px;
+  border: 2px solid rgba(107, 75, 52, 0.22);
+  border-radius: 12px 12px 18px 18px;
+  background: linear-gradient(180deg, #fffdf7, #ead7bd);
+  box-shadow: 0 10px 18px rgba(94, 67, 43, 0.12);
+}
+
+.brew-machine-top::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -12px;
+  width: 34px;
+  height: 12px;
+  border-radius: 0 0 8px 8px;
+  background: #6b4b34;
+  transform: translateX(-50%);
+}
+
+.coffee-stream {
+  position: absolute;
+  top: 74px;
+  width: 8px;
+  height: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #7a4530, #c37a3e);
+  opacity: 0;
+}
+
+.coffee-stream.running {
+  animation: coffeePour 760ms ease-in-out infinite;
+}
+
+.brew-cup {
+  position: absolute;
+  bottom: 12px;
+  font-size: 2.7rem;
+}
+
+.coffee-result-badge {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  min-width: 76px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  color: var(--coffee);
+  background: rgba(255, 253, 247, 0.88);
+  border: 1px solid var(--line);
+  font-size: 0.82rem;
+  font-weight: 900;
+  text-align: center;
+}
+
+.coffee-result-badge[data-quality="perfect"] {
+  color: #fff;
+  background: var(--coral);
+}
+
+.coffee-result-badge[data-quality="good"] {
+  background: var(--sage);
+}
+
+.coffee-result-badge[data-quality="okay"] {
+  background: #ead7bd;
+}
+
+.brew-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.brew-step {
+  display: grid;
+  place-items: center;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: #fffdf7;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.brew-step.active {
+  color: #fff;
+  background: var(--coral);
+  border-color: rgba(206, 92, 66, 0.2);
+}
+
+.brew-step.done {
+  color: var(--coffee);
+  background: var(--mint);
+}
+
+.coffee-step-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 253, 247, 0.82);
+}
+
+.coffee-step-panel h3 {
+  margin: 0 0 4px;
+  font-size: 1.02rem;
+}
+
+.coffee-step-panel p {
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.bean-drop,
+.finished-cup {
+  display: grid;
+  place-items: center;
+  justify-self: center;
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  background: var(--cream);
+  font-size: 2.25rem;
+}
+
+.timing-gauge {
+  position: relative;
+  height: 48px;
+  padding: 10px 0;
+}
+
+.gauge-zones {
+  display: grid;
+  grid-template-columns: 1.4fr 1.1fr 0.95fr 1.1fr 1.4fr;
+  height: 24px;
+  overflow: hidden;
+  border: 2px solid rgba(107, 75, 52, 0.18);
+  border-radius: 999px;
+  background: #fff;
+}
+
+.zone.red {
+  background: #dd776a;
+}
+
+.zone.yellow {
+  background: #f4ca70;
+}
+
+.zone.green {
+  background: #83bf8a;
+}
+
+.timing-pointer {
+  position: absolute;
+  left: 50%;
+  top: 4px;
+  width: 4px;
+  height: 40px;
+  border-radius: 999px;
+  background: #302218;
+  box-shadow: 0 0 0 4px rgba(255, 253, 247, 0.82);
+  transform: translateX(-50%);
+}
+
+.extraction-progress {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #ead7bd;
+}
+
+.extraction-progress span {
+  display: block;
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--coral), var(--honey));
+}
+
 .shop-tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1089,13 +1516,43 @@ p {
 @keyframes catWalk {
   0%,
   100% {
-    transform: translateY(0) rotate(-1deg);
+    transform: translateY(0) rotate(-0.8deg);
   }
   35% {
-    transform: translateY(-5px) rotate(2deg);
+    transform: translateY(-2px) rotate(1.4deg);
   }
   70% {
-    transform: translateY(1px) rotate(-2deg);
+    transform: translateY(1px) rotate(-1.2deg);
+  }
+}
+
+@keyframes tailSwing {
+  0%,
+  100% {
+    transform: rotate(-24deg);
+  }
+  50% {
+    transform: rotate(-8deg);
+  }
+}
+
+@keyframes frontStep {
+  0%,
+  100% {
+    transform: rotate(-10deg) translateY(0);
+  }
+  50% {
+    transform: rotate(12deg) translateY(2px);
+  }
+}
+
+@keyframes backStep {
+  0%,
+  100% {
+    transform: rotate(12deg) translateY(2px);
+  }
+  50% {
+    transform: rotate(-10deg) translateY(0);
   }
 }
 
@@ -1129,6 +1586,18 @@ p {
   }
 }
 
+@keyframes catPet {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  45% {
+    transform: translateY(-3px) scale(1.04);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
 @keyframes sleepBubble {
   0% {
     opacity: 0;
@@ -1151,6 +1620,18 @@ p {
   }
   50% {
     transform: scale(1.08) rotate(5deg);
+  }
+}
+
+@keyframes coffeePour {
+  0%,
+  100% {
+    height: 34px;
+    opacity: 0.72;
+  }
+  50% {
+    height: 48px;
+    opacity: 1;
   }
 }
 
@@ -1351,16 +1832,20 @@ p {
   }
 
   .cat {
-    width: 68px;
-    min-height: 72px;
+    width: 76px;
+    min-height: 70px;
   }
 
   .cat-sprite {
-    min-height: 54px;
+    min-height: 52px;
   }
 
-  .cat-emoji {
-    font-size: clamp(2.45rem, 12vw, 3.2rem);
+  .cat-art {
+    height: 54px;
+  }
+
+  .cat-body-fallback {
+    height: 50px;
   }
 
   .customer-name {
@@ -1409,6 +1894,64 @@ p {
   .modal-panel {
     width: 100%;
     max-height: 84dvh;
+  }
+
+  .coffee-panel {
+    max-height: 88dvh;
+  }
+
+  .coffee-confirm {
+    display: grid;
+  }
+
+  .coffee-confirm div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .brew-station {
+    min-height: 142px;
+    margin: 10px 0;
+  }
+
+  .brew-machine {
+    width: 128px;
+    height: 128px;
+  }
+
+  .brew-machine-top {
+    width: 84px;
+    height: 56px;
+  }
+
+  .coffee-stream {
+    top: 66px;
+  }
+
+  .brew-cup {
+    font-size: 2.25rem;
+  }
+
+  .coffee-step-panel {
+    padding: 12px;
+  }
+
+  .coffee-step-panel .primary-button,
+  .coffee-step-panel .secondary-button {
+    min-height: 52px;
+    width: 100%;
+  }
+
+  .timing-gauge {
+    height: 54px;
+  }
+
+  .gauge-zones {
+    height: 28px;
+  }
+
+  .timing-pointer {
+    height: 46px;
   }
 
   .upgrade-item {

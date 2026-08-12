@@ -180,6 +180,77 @@
     </section>
   </div>
 
+  <div id="coffeeModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="coffeeMiniGameTitle">
+    <section class="modal-panel coffee-panel">
+      <div class="modal-header">
+        <div>
+          <h2 id="coffeeMiniGameTitle">커피 제조</h2>
+          <p id="coffeeMiniGameSubtitle" class="mini-subtitle">원두를 준비하고 추출 타이밍을 맞추세요.</p>
+        </div>
+        <button id="coffeeCancelButton" class="icon-button" type="button" aria-label="커피 제조 닫기">✕</button>
+      </div>
+
+      <div id="coffeeConfirm" class="coffee-confirm hidden" role="status">
+        <span>커피 제조를 취소하시겠습니까?</span>
+        <div>
+          <button id="coffeeKeepButton" class="small-button" type="button">계속</button>
+          <button id="coffeeConfirmCancelButton" class="danger-button" type="button">취소</button>
+        </div>
+      </div>
+
+      <div class="brew-station" aria-hidden="true">
+        <div class="brew-machine">
+          <span class="brew-machine-top"></span>
+          <span id="coffeeStream" class="coffee-stream"></span>
+          <span class="brew-cup">☕</span>
+        </div>
+        <div id="coffeeResultBadge" class="coffee-result-badge">READY</div>
+      </div>
+
+      <div class="brew-steps" aria-label="커피 제조 단계">
+        <span id="coffeeStepBeans" class="brew-step active">1 원두</span>
+        <span id="coffeeStepExtract" class="brew-step">2 추출</span>
+        <span id="coffeeStepFinish" class="brew-step">3 완성</span>
+      </div>
+
+      <div id="coffeeBeanStep" class="coffee-step-panel">
+        <div class="bean-drop" aria-hidden="true">🫘</div>
+        <div>
+          <h3>원두 준비</h3>
+          <p>주문에 맞는 원두를 넣고 추출을 준비합니다.</p>
+        </div>
+        <button id="addBeansButton" class="primary-button" type="button">원두 넣기</button>
+      </div>
+
+      <div id="coffeeExtractStep" class="coffee-step-panel hidden">
+        <div class="timing-gauge" aria-label="추출 타이밍 게이지">
+          <div class="gauge-zones" aria-hidden="true">
+            <span class="zone red"></span>
+            <span class="zone yellow"></span>
+            <span class="zone green"></span>
+            <span class="zone yellow"></span>
+            <span class="zone red"></span>
+          </div>
+          <span id="timingPointer" class="timing-pointer"></span>
+        </div>
+        <div class="extraction-progress" aria-hidden="true">
+          <span id="extractionProgressFill"></span>
+        </div>
+        <button id="startExtractionButton" class="primary-button" type="button">추출 시작</button>
+        <button id="stopExtractionButton" class="secondary-button hidden" type="button">타이밍 맞추기</button>
+      </div>
+
+      <div id="coffeeFinishStep" class="coffee-step-panel hidden">
+        <div class="finished-cup" aria-hidden="true">☕</div>
+        <div>
+          <h3 id="coffeeFinishTitle">커피 완성!</h3>
+          <p id="coffeeFinishText">손님에게 전달할 수 있습니다.</p>
+        </div>
+        <button id="coffeeDoneButton" class="primary-button" type="button">완료</button>
+      </div>
+    </section>
+  </div>
+
   <div id="levelUpToast" class="level-up hidden" role="status" aria-live="polite"></div>
   <div id="toastRoot" class="toast-root" aria-live="polite"></div>
 

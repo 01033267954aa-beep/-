@@ -14,12 +14,26 @@ const CONFIG = {
   fullCafeRetryDelay: 2400,
   toastDuration: 2100,
   maxToasts: 3,
+  catWalkSpeedMin: 0.0048,
+  catWalkSpeedMax: 0.0074,
+  catMoveDistanceMin: 8,
+  catMoveDistanceMax: 22,
+  catMoveDurationMin: 3200,
+  catMoveDurationMax: 9400,
+  catPersonalSpace: 9,
   catBounds: {
     minX: 18,
-    maxX: 84,
-    minY: 56,
+    maxX: 86,
+    minY: 58,
     maxY: 86
-  }
+  },
+  catBlockedZones: [
+    { x1: 2, y1: 12, x2: 25, y2: 42 },
+    { x1: 0, y1: 40, x2: 100, y2: 51 }
+  ],
+  coffeeMiniGameDuration: 7600,
+  coffeePointerBaseSpeed: 0.044,
+  coffeePointerMinimumSpeed: 0.029
 };
 
 const GAME_DATA = {
@@ -29,6 +43,13 @@ const GAME_DATA = {
       name: "치즈냥",
       emoji: "🐱",
       image: "./assets/cats/cheese-cat.webp",
+      sprites: {
+        idle: "./assets/cats/cheese/idle.webp",
+        walk1: "./assets/cats/cheese/walk-1.webp",
+        walk2: "./assets/cats/cheese/walk-2.webp",
+        sleep: "./assets/cats/cheese/sleep.webp",
+        sit: "./assets/cats/cheese/sit.webp"
+      },
       price: 0,
       effect: "손님 만족도 +5%",
       satisfactionBonus: 0.05
@@ -38,6 +59,13 @@ const GAME_DATA = {
       name: "검은냥",
       emoji: "🐈‍⬛",
       image: "./assets/cats/black-cat.webp",
+      sprites: {
+        idle: "./assets/cats/black/idle.webp",
+        walk1: "./assets/cats/black/walk-1.webp",
+        walk2: "./assets/cats/black/walk-2.webp",
+        sleep: "./assets/cats/black/sleep.webp",
+        sit: "./assets/cats/black/sit.webp"
+      },
       price: 820,
       effect: "팁 획득 확률 +18%",
       tipChanceBonus: 0.18
@@ -47,6 +75,13 @@ const GAME_DATA = {
       name: "샴냥",
       emoji: "🐈",
       image: "./assets/cats/siamese-cat.webp",
+      sprites: {
+        idle: "./assets/cats/siamese/idle.webp",
+        walk1: "./assets/cats/siamese/walk-1.webp",
+        walk2: "./assets/cats/siamese/walk-2.webp",
+        sleep: "./assets/cats/siamese/sleep.webp",
+        sit: "./assets/cats/siamese/sit.webp"
+      },
       price: 980,
       effect: "음료 판매 금액 +12%",
       revenueBonus: 0.12
@@ -56,6 +91,13 @@ const GAME_DATA = {
       name: "뚱냥",
       emoji: "😺",
       image: "./assets/cats/chubby-cat.webp",
+      sprites: {
+        idle: "./assets/cats/chubby/idle.webp",
+        walk1: "./assets/cats/chubby/walk-1.webp",
+        walk2: "./assets/cats/chubby/walk-2.webp",
+        sleep: "./assets/cats/chubby/sleep.webp",
+        sit: "./assets/cats/chubby/sit.webp"
+      },
       price: 1180,
       effect: "손님 방문 속도 +14%",
       visitSpeedMultiplier: 0.86
@@ -150,15 +192,19 @@ const runtime = {
   customers: [],
   customerId: 0,
   readyDrinks: 0,
+  readyDrinkQueue: [],
   isBrewing: false,
   brewStart: 0,
   brewEnd: 0,
+  coffeeMiniGame: null,
   nextCustomerAt: 0,
   nextEventAt: 0,
   influencerUntil: 0,
   luckyNextCustomer: false,
   cupEventEndsAt: 0,
   catActors: {},
+  catSpriteCache: {},
+  catLastUpdate: 0,
   rafId: 0,
   saveIntervalId: 0,
   eventBannerTimeoutId: 0,
@@ -232,7 +278,29 @@ function cacheElements() {
     manualSaveButton: document.getElementById("manualSaveButton"),
     resetGameButton: document.getElementById("resetGameButton"),
     levelUpToast: document.getElementById("levelUpToast"),
-    toastRoot: document.getElementById("toastRoot")
+    toastRoot: document.getElementById("toastRoot"),
+    coffeeModal: document.getElementById("coffeeModal"),
+    coffeeCancelButton: document.getElementById("coffeeCancelButton"),
+    coffeeConfirm: document.getElementById("coffeeConfirm"),
+    coffeeKeepButton: document.getElementById("coffeeKeepButton"),
+    coffeeConfirmCancelButton: document.getElementById("coffeeConfirmCancelButton"),
+    coffeeMiniGameSubtitle: document.getElementById("coffeeMiniGameSubtitle"),
+    coffeeStream: document.getElementById("coffeeStream"),
+    coffeeResultBadge: document.getElementById("coffeeResultBadge"),
+    coffeeStepBeans: document.getElementById("coffeeStepBeans"),
+    coffeeStepExtract: document.getElementById("coffeeStepExtract"),
+    coffeeStepFinish: document.getElementById("coffeeStepFinish"),
+    coffeeBeanStep: document.getElementById("coffeeBeanStep"),
+    coffeeExtractStep: document.getElementById("coffeeExtractStep"),
+    coffeeFinishStep: document.getElementById("coffeeFinishStep"),
+    addBeansButton: document.getElementById("addBeansButton"),
+    startExtractionButton: document.getElementById("startExtractionButton"),
+    stopExtractionButton: document.getElementById("stopExtractionButton"),
+    timingPointer: document.getElementById("timingPointer"),
+    extractionProgressFill: document.getElementById("extractionProgressFill"),
+    coffeeFinishTitle: document.getElementById("coffeeFinishTitle"),
+    coffeeFinishText: document.getElementById("coffeeFinishText"),
+    coffeeDoneButton: document.getElementById("coffeeDoneButton")
   };
 }
 
@@ -254,6 +322,13 @@ function bindEvents() {
     showToast("게임을 저장했습니다.");
   });
   bindPointer(els.resetGameButton, resetGame);
+  bindPointer(els.coffeeCancelButton, cancelCoffeeMiniGame);
+  bindPointer(els.coffeeKeepButton, hideCoffeeCancelConfirm);
+  bindPointer(els.coffeeConfirmCancelButton, confirmCancelCoffeeMiniGame);
+  bindPointer(els.addBeansButton, addBeansToMachine);
+  bindPointer(els.startExtractionButton, startExtraction);
+  bindPointer(els.stopExtractionButton, stopExtraction);
+  bindPointer(els.coffeeDoneButton, closeCoffeeMiniGame);
 
   document.querySelectorAll("[data-close-modal]").forEach((button) => {
     bindPointer(button, () => closeModal(button.dataset.closeModal));
@@ -278,6 +353,10 @@ function bindEvents() {
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
+      if (!els.coffeeModal.classList.contains("hidden")) {
+        cancelCoffeeMiniGame(event);
+        return;
+      }
       closeAllModals();
     }
   });
@@ -485,12 +564,28 @@ function renderCats() {
     const cooldownLeft = Math.max(0, Math.ceil((actor.cooldownUntil - performance.now()) / 1000));
     const cooldownText = cooldownLeft > 0 ? `<span class="cat-cooldown">${cooldownLeft}s</span>` : "";
     const sleepMark = actor.mode === "sleeping" ? `<span class="cat-sleep" aria-hidden="true">💤</span>` : "";
+    const spritePath = getCatSpritePath(cat, actor);
+    requestCatSprite(spritePath);
+    const spriteLoaded = runtime.catSpriteCache[spritePath] === "loaded";
+    const imageSource = spriteLoaded ? `src="${spritePath}"` : `data-src="${spritePath}"`;
     return `
       <div class="cat cat-${actor.mode} facing-${actor.direction}" style="left:${actor.x}%; top:${actor.y}%;" data-cat-id="${cat.id}">
         <button type="button" aria-label="${cat.name} 쓰다듬기">
           ${sleepMark}
-          <span class="cat-sprite" data-image="${cat.image}" aria-hidden="true">
-            <span class="cat-emoji">${cat.emoji}</span>
+          <span class="cat-sprite" data-image="${spritePath}" aria-hidden="true">
+            <img class="cat-art ${spriteLoaded ? "" : "failed"}" ${imageSource} alt="" loading="lazy">
+            <span class="cat-body-fallback cat-body-${cat.id}">
+              <span class="cat-tail"></span>
+              <span class="cat-body"></span>
+              <span class="cat-head">
+                <span class="cat-ear ear-left"></span>
+                <span class="cat-ear ear-right"></span>
+                <span class="cat-eye eye-left"></span>
+                <span class="cat-eye eye-right"></span>
+              </span>
+              <span class="cat-leg leg-front"></span>
+              <span class="cat-leg leg-back"></span>
+            </span>
           </span>
           <span class="cat-name">${cat.name}</span>
           ${cooldownText}
@@ -498,6 +593,30 @@ function renderCats() {
       </div>
     `;
   }).join("");
+}
+
+function getCatSpritePath(cat, actor) {
+  if (!cat?.sprites) return cat?.image || "";
+  if (actor.mode === "walking") {
+    return actor.walkFrame === 2 ? cat.sprites.walk2 : cat.sprites.walk1;
+  }
+  if (actor.mode === "sleeping") return cat.sprites.sleep;
+  if (actor.mode === "sitting") return cat.sprites.sit;
+  return cat.sprites.idle;
+}
+
+function requestCatSprite(path) {
+  if (!path || runtime.catSpriteCache[path] || typeof Image === "undefined") return;
+  runtime.catSpriteCache[path] = "loading";
+  const image = new Image();
+  image.onload = () => {
+    runtime.catSpriteCache[path] = "loaded";
+    renderCats();
+  };
+  image.onerror = () => {
+    runtime.catSpriteCache[path] = "missing";
+  };
+  image.src = path;
 }
 
 function renderShop() {
@@ -572,8 +691,9 @@ function renderUpgrades() {
 function handleMachineClick(event) {
   event.preventDefault();
   if (isActionLocked("machine")) return;
-  if (runtime.isBrewing) {
-    showToast("음료를 제작 중입니다.");
+  if (runtime.coffeeMiniGame) {
+    openModal("coffeeModal");
+    renderCoffeeMiniGame();
     return;
   }
 
@@ -588,36 +708,24 @@ function handleMachineClick(event) {
     return;
   }
 
-  const now = performance.now();
-  runtime.isBrewing = true;
-  runtime.brewStart = now;
-  runtime.brewEnd = now + getBrewDuration();
-  updateMachineStatus();
-  showToast("☕ 커피 제작을 시작했습니다.");
+  startCoffeeMiniGame();
 }
 
 function updateBrewing(timestamp) {
-  if (!runtime.isBrewing) return;
-  const progress = clamp((timestamp - runtime.brewStart) / (runtime.brewEnd - runtime.brewStart), 0, 1);
-  els.machineProgressFill.style.width = `${progress * 100}%`;
-  els.machineStatus.textContent = `만드는 중 ${Math.round(progress * 100)}%`;
-
-  if (timestamp >= runtime.brewEnd) {
-    runtime.isBrewing = false;
-    runtime.readyDrinks += 1;
-    els.machineProgressFill.style.width = "0%";
-    showFloatingText(els.cafeStage, "☕ 완성", 18, 23);
-    showToast("음료가 완성되었습니다. 주문한 손님에게 전달하세요.");
-    renderHud();
-  }
+  updateCoffeeMiniGame(timestamp);
 }
 
 function updateMachineStatus() {
   els.coffeeMachine.classList.toggle("brewing", runtime.isBrewing);
   els.coffeeMachine.classList.toggle("ready", !runtime.isBrewing && runtime.readyDrinks > 0);
-  if (runtime.isBrewing) {
-    const remaining = Math.max(0, Math.ceil((runtime.brewEnd - performance.now()) / 1000));
-    els.machineStatus.textContent = `만드는 중 ${remaining}s`;
+  if (runtime.coffeeMiniGame) {
+    const labels = {
+      beans: "원두 준비",
+      readyToExtract: "추출 준비",
+      extracting: "추출 중",
+      complete: "완성"
+    };
+    els.machineStatus.textContent = labels[runtime.coffeeMiniGame.step] || "제조 중";
     return;
   }
   if (runtime.readyDrinks > 0) {
@@ -626,6 +734,250 @@ function updateMachineStatus() {
   }
   els.machineStatus.textContent = "주문 대기";
   els.machineProgressFill.style.width = "0%";
+}
+
+function startCoffeeMiniGame() {
+  const now = performance.now();
+  const settings = getCoffeeMiniGameSettings();
+  runtime.isBrewing = true;
+  runtime.brewStart = now;
+  runtime.brewEnd = 0;
+  runtime.coffeeMiniGame = {
+    step: "beans",
+    pointer: 50,
+    pointerDirection: 1,
+    pointerSpeed: settings.pointerSpeed,
+    extractionDuration: settings.duration,
+    extractionStart: 0,
+    extractionEnd: 0,
+    quality: null
+  };
+  openModal("coffeeModal");
+  renderCoffeeMiniGame();
+  updateMachineStatus();
+  showToast("커피 제조를 시작합니다.");
+}
+
+function addBeansToMachine(event) {
+  event.preventDefault();
+  const miniGame = runtime.coffeeMiniGame;
+  if (!miniGame || miniGame.step !== "beans") return;
+  miniGame.step = "readyToExtract";
+  renderCoffeeMiniGame();
+  showToast("원두를 넣었습니다.");
+}
+
+function startExtraction(event) {
+  event.preventDefault();
+  const miniGame = runtime.coffeeMiniGame;
+  if (!miniGame || miniGame.step !== "readyToExtract") return;
+  const now = performance.now();
+  miniGame.step = "extracting";
+  miniGame.extractionStart = now;
+  miniGame.extractionEnd = now + miniGame.extractionDuration;
+  miniGame.pointer = 50;
+  miniGame.pointerDirection = Math.random() < 0.5 ? -1 : 1;
+  runtime.brewStart = miniGame.extractionStart;
+  runtime.brewEnd = miniGame.extractionEnd;
+  renderCoffeeMiniGame();
+  updateMachineStatus();
+}
+
+function stopExtraction(event) {
+  event.preventDefault();
+  const miniGame = runtime.coffeeMiniGame;
+  if (!miniGame || miniGame.step !== "extracting") return;
+  finishCoffee(calculateCoffeeQuality(miniGame.pointer));
+}
+
+function updateCoffeeMiniGame(timestamp) {
+  const miniGame = runtime.coffeeMiniGame;
+  if (!miniGame || miniGame.step !== "extracting") return;
+
+  const delta = runtime.brewStart ? Math.min(80, timestamp - (miniGame.lastUpdate || timestamp)) : 16;
+  miniGame.lastUpdate = timestamp;
+  miniGame.pointer += miniGame.pointerDirection * miniGame.pointerSpeed * delta;
+  if (miniGame.pointer >= 100) {
+    miniGame.pointer = 100;
+    miniGame.pointerDirection = -1;
+  }
+  if (miniGame.pointer <= 0) {
+    miniGame.pointer = 0;
+    miniGame.pointerDirection = 1;
+  }
+
+  const progress = clamp((timestamp - miniGame.extractionStart) / Math.max(1, miniGame.extractionEnd - miniGame.extractionStart), 0, 1);
+  els.timingPointer.style.left = `${miniGame.pointer}%`;
+  els.extractionProgressFill.style.width = `${progress * 100}%`;
+  els.machineProgressFill.style.width = `${progress * 100}%`;
+  els.machineStatus.textContent = `추출 중 ${Math.round(progress * 100)}%`;
+
+  if (timestamp >= miniGame.extractionEnd) {
+    finishCoffee(calculateCoffeeQuality(miniGame.pointer, true));
+  }
+}
+
+function finishCoffee(quality) {
+  const miniGame = runtime.coffeeMiniGame;
+  if (!miniGame || miniGame.step === "complete") return;
+  miniGame.step = "complete";
+  miniGame.quality = quality;
+  runtime.isBrewing = false;
+  runtime.readyDrinkQueue.push({
+    ...quality,
+    createdAt: Date.now()
+  });
+  syncReadyDrinkCount();
+  els.machineProgressFill.style.width = "0%";
+  showFloatingText(els.cafeStage, `${quality.label} ☕`, 18, 23);
+  showToast(`${quality.label} 커피가 완성되었습니다.`);
+  renderCoffeeMiniGame();
+  renderHud();
+  saveGame();
+}
+
+function calculateCoffeeQuality(pointer, timedOut = false) {
+  const distance = Math.abs(pointer - 50);
+  if (!timedOut && distance <= getCoffeeMiniGameSettings().perfectWindow / 2) {
+    return {
+      key: "perfect",
+      label: "Perfect",
+      revenueMultiplier: 1.12,
+      tipBonus: 0.18,
+      xpBonus: 8,
+      drinkTimeMultiplier: 0.86
+    };
+  }
+  if (distance <= 27) {
+    return {
+      key: "good",
+      label: "Good",
+      revenueMultiplier: 1,
+      tipBonus: 0.04,
+      xpBonus: 3,
+      drinkTimeMultiplier: 1
+    };
+  }
+  return {
+    key: "okay",
+    label: "Okay",
+    revenueMultiplier: 0.92,
+    tipBonus: 0,
+    xpBonus: 0,
+    drinkTimeMultiplier: 1.12
+  };
+}
+
+function getCoffeeMiniGameSettings() {
+  const level = Math.max(1, state.upgrades.coffeeMachine);
+  const equipmentMultiplier = getOwnedBonus("brewMultiplier", true);
+  return {
+    perfectWindow: clamp(16 + (level - 1) * 2.5, 16, 28),
+    pointerSpeed: Math.max(CONFIG.coffeePointerMinimumSpeed, CONFIG.coffeePointerBaseSpeed * Math.pow(0.94, level - 1) * equipmentMultiplier),
+    duration: Math.max(5200, CONFIG.coffeeMiniGameDuration * Math.pow(0.97, level - 1))
+  };
+}
+
+function renderCoffeeMiniGame() {
+  const miniGame = runtime.coffeeMiniGame;
+  if (!miniGame) return;
+  const step = miniGame.step;
+  const quality = miniGame.quality;
+  const isExtracting = step === "extracting";
+  const isComplete = step === "complete";
+
+  els.coffeeConfirm.classList.add("hidden");
+  els.coffeeBeanStep.classList.toggle("hidden", step !== "beans");
+  els.coffeeExtractStep.classList.toggle("hidden", step !== "readyToExtract" && step !== "extracting");
+  els.coffeeFinishStep.classList.toggle("hidden", !isComplete);
+  els.startExtractionButton.classList.toggle("hidden", step !== "readyToExtract");
+  els.stopExtractionButton.classList.toggle("hidden", !isExtracting);
+  els.coffeeStream.classList.toggle("running", isExtracting);
+  els.coffeeStepBeans.classList.toggle("active", step === "beans");
+  els.coffeeStepExtract.classList.toggle("active", step === "readyToExtract" || isExtracting);
+  els.coffeeStepFinish.classList.toggle("active", isComplete);
+  els.coffeeStepBeans.classList.toggle("done", step !== "beans");
+  els.coffeeStepExtract.classList.toggle("done", isComplete);
+  els.coffeeResultBadge.textContent = quality?.label || (isExtracting ? "BREW" : "READY");
+  els.coffeeResultBadge.dataset.quality = quality?.key || "";
+  els.coffeeMiniGameSubtitle.textContent = getCoffeeStepText(step, quality);
+  els.timingPointer.style.left = `${miniGame.pointer}%`;
+  els.extractionProgressFill.style.width = isExtracting ? els.extractionProgressFill.style.width : "0%";
+
+  if (quality) {
+    els.coffeeFinishTitle.textContent = `${quality.label} 커피 완성!`;
+    els.coffeeFinishText.textContent = getCoffeeQualityText(quality);
+  }
+}
+
+function getCoffeeStepText(step, quality) {
+  if (step === "beans") return "원두를 넣어 제조를 시작하세요.";
+  if (step === "readyToExtract") return "추출을 시작한 뒤 초록 영역에서 멈추세요.";
+  if (step === "extracting") return "포인터가 초록 영역에 올 때 타이밍을 맞추세요.";
+  if (step === "complete") return `${quality?.label || "Good"} 품질의 커피가 준비되었습니다.`;
+  return "커피를 준비하세요.";
+}
+
+function getCoffeeQualityText(quality) {
+  if (quality.key === "perfect") return "손님 만족도와 팁 확률이 크게 올라갑니다.";
+  if (quality.key === "good") return "기본 품질로 안정적인 만족도를 제공합니다.";
+  return "주문은 완료되지만 팁 보너스는 없습니다.";
+}
+
+function cancelCoffeeMiniGame(event) {
+  event?.preventDefault?.();
+  const miniGame = runtime.coffeeMiniGame;
+  if (!miniGame) {
+    closeModal("coffeeModal");
+    return;
+  }
+  if (miniGame.step === "extracting") {
+    els.coffeeConfirm.classList.remove("hidden");
+    return;
+  }
+  closeCoffeeMiniGame(event);
+}
+
+function hideCoffeeCancelConfirm(event) {
+  event.preventDefault();
+  els.coffeeConfirm.classList.add("hidden");
+}
+
+function confirmCancelCoffeeMiniGame(event) {
+  event.preventDefault();
+  runtime.coffeeMiniGame = null;
+  runtime.isBrewing = false;
+  runtime.brewStart = 0;
+  runtime.brewEnd = 0;
+  els.machineProgressFill.style.width = "0%";
+  els.extractionProgressFill.style.width = "0%";
+  closeModal("coffeeModal");
+  updateMachineStatus();
+  showToast("커피 제조를 취소했습니다.");
+}
+
+function closeCoffeeMiniGame(event) {
+  event?.preventDefault?.();
+  const step = runtime.coffeeMiniGame?.step;
+  if (step === "extracting") {
+    cancelCoffeeMiniGame(event);
+    return;
+  }
+  if (runtime.coffeeMiniGame) {
+    runtime.coffeeMiniGame = null;
+    runtime.isBrewing = false;
+    runtime.brewStart = 0;
+    runtime.brewEnd = 0;
+    els.machineProgressFill.style.width = "0%";
+    els.extractionProgressFill.style.width = "0%";
+    if (step !== "complete") showToast("커피 제조를 취소했습니다.");
+  }
+  closeModal("coffeeModal");
+  updateMachineStatus();
+}
+
+function syncReadyDrinkCount() {
+  runtime.readyDrinks = runtime.readyDrinkQueue.length;
 }
 
 function handleCustomerClick(event) {
@@ -656,12 +1008,14 @@ function handleCustomerClick(event) {
       showToast("완성된 음료가 없습니다. 커피 머신을 눌러 제작하세요.");
       return;
     }
-    runtime.readyDrinks -= 1;
+    const drink = runtime.readyDrinkQueue.shift() || calculateCoffeeQuality(50, true);
+    syncReadyDrinkCount();
     customer.status = "served";
+    customer.drinkQuality = drink;
     customer.servedAt = performance.now();
-    customer.payAt = customer.servedAt + randomBetween(2800, 4300);
-    showFloatingText(node, "음료 전달", 50, 0);
-    showToast("손님이 음료를 마시고 있습니다.");
+    customer.payAt = customer.servedAt + randomBetween(2800, 4300) * (drink.drinkTimeMultiplier || 1);
+    showFloatingText(node, `${drink.label} 전달`, 50, 0);
+    showToast(`손님에게 ${drink.label} 커피를 전달했습니다.`);
     renderCustomers();
     renderHud();
     return;
@@ -711,7 +1065,7 @@ function completePayment(customer, timestamp) {
   const reward = calculateReward(customer);
   addCoins(reward.total);
   state.totalSales += 1;
-  addXp(customer.lucky ? 34 : 24);
+  addXp((customer.lucky ? 34 : 24) + (customer.drinkQuality?.xpBonus || 0));
   customer.status = "leaving";
   customer.leaveAt = timestamp + 650;
   const positions = getTablePositions(state.upgrades.tables);
@@ -810,83 +1164,188 @@ function initializeCats() {
 }
 
 function createCatActor(catId) {
-  const bounds = CONFIG.catBounds;
+  const spawn = getSafeCatPosition(catId);
   runtime.catActors[catId] = {
-    x: randomBetween(bounds.minX + 6, bounds.maxX - 6),
-    y: randomBetween(bounds.minY + 2, bounds.maxY - 3),
-    targetX: randomBetween(bounds.minX + 6, bounds.maxX - 6),
-    targetY: randomBetween(bounds.minY + 2, bounds.maxY - 3),
-    speed: randomBetween(0.0011, 0.0019),
-    mode: "resting",
-    modeUntil: performance.now() + randomBetween(1800, 4200),
+    x: spawn.x,
+    y: spawn.y,
+    startX: spawn.x,
+    startY: spawn.y,
+    targetX: spawn.x,
+    targetY: spawn.y,
+    moveStart: 0,
+    moveEnd: 0,
+    isMoving: false,
+    mode: "idle",
+    modeUntil: performance.now() + randomBetween(2400, 5200),
     direction: "right",
+    walkFrame: 1,
+    restStreak: 0,
     cooldownUntil: 0
   };
 }
 
 function updateCatMovement(timestamp) {
+  const delta = runtime.catLastUpdate ? Math.min(80, timestamp - runtime.catLastUpdate) : 16;
+  runtime.catLastUpdate = timestamp;
   const catNodes = els.catLayer.querySelectorAll("[data-cat-id]");
   catNodes.forEach((node) => {
-    const actor = runtime.catActors[node.dataset.catId];
+    const catId = node.dataset.catId;
+    const actor = runtime.catActors[catId];
     if (!actor) return;
 
     if (timestamp >= actor.modeUntil) {
-      chooseNextCatBehavior(actor, timestamp);
+      chooseNextCatBehavior(catId, actor, timestamp);
     }
 
-    if (actor.mode === "walking") {
-      const dx = actor.targetX - actor.x;
-      const dy = actor.targetY - actor.y;
-      if (Math.abs(dx) > 0.18) {
-        actor.direction = dx < 0 ? "left" : "right";
-      }
-      actor.x += dx * actor.speed * 16;
-      actor.y += dy * actor.speed * 16;
+    if (actor.isMoving) {
+      const progress = clamp((timestamp - actor.moveStart) / Math.max(1, actor.moveEnd - actor.moveStart), 0, 1);
+      const eased = easeInOutSine(progress);
+      actor.x = actor.startX + (actor.targetX - actor.startX) * eased;
+      actor.y = actor.startY + (actor.targetY - actor.startY) * eased;
+      actor.walkFrame = Math.floor(timestamp / 360) % 2 === 0 ? 1 : 2;
 
-      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) {
-        chooseNextCatBehavior(actor, timestamp, "resting");
+      if (progress >= 1) {
+        actor.x = actor.targetX;
+        actor.y = actor.targetY;
+        actor.isMoving = false;
+        chooseNextCatBehavior(catId, actor, timestamp, pickWeighted([
+          ["idle", 0.45],
+          ["sitting", 0.33],
+          ["sleeping", 0.22]
+        ]));
       }
     }
 
+    actor.x = clamp(actor.x, CONFIG.catBounds.minX, CONFIG.catBounds.maxX);
+    actor.y = clamp(actor.y, CONFIG.catBounds.minY, CONFIG.catBounds.maxY);
     node.style.left = `${actor.x}%`;
     node.style.top = `${actor.y}%`;
     node.className = `cat cat-${actor.mode} facing-${actor.direction}`;
+
+    const cat = GAME_DATA.cats[catId];
+    const image = node.querySelector(".cat-art");
+    const spritePath = getCatSpritePath(cat, actor);
+    requestCatSprite(spritePath);
+    if (image) {
+      image.dataset.src = spritePath;
+      if (runtime.catSpriteCache[spritePath] === "loaded") {
+        if (image.getAttribute("src") !== spritePath) image.setAttribute("src", spritePath);
+        image.classList.remove("failed");
+      } else {
+        image.removeAttribute("src");
+        image.classList.add("failed");
+      }
+    }
   });
 }
 
-function chooseNextCatBehavior(actor, timestamp, forcedMode) {
-  const bounds = CONFIG.catBounds;
-  const mode = forcedMode || pickWeighted([
-    ["walking", 0.38],
-    ["resting", 0.24],
-    ["sitting", 0.2],
-    ["sleeping", 0.1],
-    ["looking", 0.08]
-  ]);
+function chooseNextCatBehavior(catId, actor, timestamp, forcedMode) {
+  const mode = forcedMode || (actor.restStreak >= 2 ? "walking" : pickWeighted([
+    ["walking", 0.34],
+    ["idle", 0.28],
+    ["sitting", 0.22],
+    ["sleeping", 0.11],
+    ["looking", 0.05]
+  ]));
 
   actor.mode = mode;
 
   if (mode === "walking") {
-    actor.targetX = randomBetween(bounds.minX, bounds.maxX);
-    actor.targetY = randomBetween(bounds.minY, bounds.maxY);
-    actor.speed = randomBetween(0.001, 0.0018);
-    actor.direction = actor.targetX < actor.x ? "left" : "right";
-    actor.modeUntil = timestamp + randomBetween(5200, 9200);
+    actor.restStreak = 0;
+    startCatMove(catId, actor, timestamp);
     return;
   }
 
+  actor.isMoving = false;
+  actor.restStreak = (actor.restStreak || 0) + 1;
   const durationByMode = {
-    resting: [2300, 5200],
-    sitting: [3200, 6800],
-    sleeping: [4200, 7800],
-    looking: [1800, 3600]
+    idle: [2400, 5600],
+    sitting: [4200, 8200],
+    sleeping: [6000, 11000],
+    looking: [1800, 3800]
   };
-  const [minDuration, maxDuration] = durationByMode[mode] || durationByMode.resting;
+  const [minDuration, maxDuration] = durationByMode[mode] || durationByMode.idle;
   actor.modeUntil = timestamp + randomBetween(minDuration, maxDuration);
 
-  if (mode === "looking" && Math.random() < 0.55) {
+  if (mode === "looking" && Math.random() < 0.6) {
     actor.direction = actor.direction === "left" ? "right" : "left";
   }
+}
+
+function startCatMove(catId, actor, timestamp) {
+  const target = getSafeCatTarget(catId, actor);
+  const dx = target.x - actor.x;
+  const dy = target.y - actor.y;
+  const distance = Math.hypot(dx, dy);
+  const speed = randomBetween(CONFIG.catWalkSpeedMin, CONFIG.catWalkSpeedMax);
+  const duration = clamp(distance / speed, CONFIG.catMoveDurationMin, CONFIG.catMoveDurationMax);
+
+  actor.startX = actor.x;
+  actor.startY = actor.y;
+  actor.targetX = target.x;
+  actor.targetY = target.y;
+  actor.moveStart = timestamp;
+  actor.moveEnd = timestamp + duration;
+  actor.modeUntil = actor.moveEnd;
+  actor.isMoving = true;
+  actor.mode = "walking";
+  actor.walkFrame = 1;
+  if (Math.abs(dx) > 0.25) {
+    actor.direction = actor.targetX < actor.x ? "left" : "right";
+  }
+}
+
+function getSafeCatPosition(catId) {
+  const bounds = CONFIG.catBounds;
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    const position = {
+      x: randomBetween(bounds.minX + 2, bounds.maxX - 2),
+      y: randomBetween(bounds.minY + 1, bounds.maxY - 1)
+    };
+    if (isCatPositionAllowed(position.x, position.y, catId)) return position;
+  }
+  return {
+    x: randomBetween(bounds.minX + 4, bounds.maxX - 4),
+    y: randomBetween(bounds.minY + 3, bounds.maxY - 3)
+  };
+}
+
+function getSafeCatTarget(catId, actor) {
+  const bounds = CONFIG.catBounds;
+  for (let attempt = 0; attempt < 28; attempt += 1) {
+    const angle = randomBetween(0, Math.PI * 2);
+    const distance = randomBetween(CONFIG.catMoveDistanceMin, CONFIG.catMoveDistanceMax);
+    const target = {
+      x: clamp(actor.x + Math.cos(angle) * distance, bounds.minX, bounds.maxX),
+      y: clamp(actor.y + Math.sin(angle) * distance * 0.55, bounds.minY, bounds.maxY)
+    };
+    if (isCatPositionAllowed(target.x, target.y, catId)) return target;
+  }
+  return {
+    x: clamp(actor.x + randomBetween(-7, 7), bounds.minX, bounds.maxX),
+    y: clamp(actor.y + randomBetween(-4, 4), bounds.minY, bounds.maxY)
+  };
+}
+
+function isCatPositionAllowed(x, y, catId) {
+  const blocked = CONFIG.catBlockedZones.some((zone) => (
+    x >= zone.x1 && x <= zone.x2 && y >= zone.y1 && y <= zone.y2
+  ));
+  if (blocked) return false;
+
+  const tooCloseToTable = getTablePositions(state.upgrades.tables).some((position) => (
+    Math.abs(x - position.x) < 8 && Math.abs(y - position.y) < 6
+  ));
+  if (tooCloseToTable) return false;
+
+  return Object.entries(runtime.catActors).every(([otherCatId, other]) => {
+    if (otherCatId === catId || !other) return true;
+    return Math.hypot(x - other.x, y - other.y) >= CONFIG.catPersonalSpace;
+  });
+}
+
+function easeInOutSine(progress) {
+  return -(Math.cos(Math.PI * progress) - 1) / 2;
 }
 
 function handleCatClick(event) {
@@ -908,6 +1367,9 @@ function handleCatClick(event) {
 
   const bonus = 10 + Math.floor(state.level * 2);
   addCoins(bonus);
+  actor.isMoving = false;
+  actor.mode = "petting";
+  actor.modeUntil = now + 1200;
   actor.cooldownUntil = now + 9000;
   showHeart(node);
   showFloatingText(node, `+${bonus}코인`, 50, 0);
@@ -1094,7 +1556,7 @@ function getUpgradeDefinitions() {
       name: "커피 머신 업그레이드",
       cost: getUpgradeCost("coffeeMachine"),
       disabled: false,
-      description: `Lv.${state.upgrades.coffeeMachine} · 제작 시간 ${Math.round(getBrewDuration() / 100) / 10}초`
+      description: `Lv.${state.upgrades.coffeeMachine} · Perfect 영역 ${Math.round(getCoffeeMiniGameSettings().perfectWindow)}%`
     },
     {
       id: "interior",
@@ -1121,12 +1583,6 @@ function getUpgradeCost(type) {
   return 9999;
 }
 
-function getBrewDuration() {
-  const upgradeReduction = Math.pow(0.86, state.upgrades.coffeeMachine - 1);
-  const equipmentMultiplier = getOwnedBonus("brewMultiplier", true);
-  return Math.max(1200, 4300 * upgradeReduction * equipmentMultiplier);
-}
-
 function getCustomerInterval() {
   const upgradeMultiplier = Math.pow(0.9, state.upgrades.visitSpeed - 1);
   const catMultiplier = getOwnedBonus("visitSpeedMultiplier", true);
@@ -1140,9 +1596,10 @@ function calculateReward(customer) {
   const interiorBonus = 1 + (state.upgrades.interior - 1) * 0.12;
   const revenueBonus = 1 + getOwnedBonus("revenueBonus", false);
   const satisfactionBonus = 1 + getOwnedBonus("satisfactionBonus", false);
+  const qualityBonus = customer.drinkQuality?.revenueMultiplier || 1;
   const luckyBonus = customer.lucky ? 1.25 : 1;
-  const amount = Math.round(base * interiorBonus * revenueBonus * satisfactionBonus * luckyBonus);
-  const tipChance = clamp(0.12 + getOwnedBonus("tipChanceBonus", false) + (customer.lucky ? 0.62 : 0), 0, 0.92);
+  const amount = Math.round(base * interiorBonus * revenueBonus * satisfactionBonus * luckyBonus * qualityBonus);
+  const tipChance = clamp(0.12 + getOwnedBonus("tipChanceBonus", false) + (customer.drinkQuality?.tipBonus || 0) + (customer.lucky ? 0.62 : 0), 0, 0.92);
   let tip = 0;
   if (Math.random() < tipChance) {
     const tipRate = customer.lucky ? randomBetween(0.55, 0.95) : randomBetween(0.16, 0.34);
@@ -1218,7 +1675,7 @@ function closeModal(id) {
 }
 
 function closeAllModals() {
-  ["shopModal", "catsModal", "upgradeModal", "settingsModal"].forEach(closeModal);
+  ["shopModal", "catsModal", "upgradeModal", "settingsModal", "coffeeModal"].forEach(closeModal);
 }
 
 function resetGame() {
@@ -1232,8 +1689,11 @@ function resetGame() {
   state = cloneDefaultState();
   runtime.customers = [];
   runtime.readyDrinks = 0;
+  runtime.readyDrinkQueue = [];
   runtime.isBrewing = false;
+  runtime.coffeeMiniGame = null;
   runtime.catActors = {};
+  runtime.catLastUpdate = 0;
   normalizeState();
   initializeCats();
   closeAllModals();
