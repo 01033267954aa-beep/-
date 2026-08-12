@@ -1,0 +1,14 @@
+# Local runtime files
+.meow-cafe-server.pid
+*.log
+
+# Local environment files
+.env
+.env.*
+
+# OS/editor noise
+Thumbs.db
+.DS_Store
+
+# Dependency folders are not used by this static project, but keep them out if created later.
+node_modules/
