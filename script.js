@@ -4,16 +4,25 @@ const STORAGE_KEY = "meowCafeTycoonSaveV1";
 const SAVE_VERSION = 1;
 const DEBUG_MODE = false;
 const MAX_TABLES = 8;
-const MAX_READY_DRINKS = 3;
+const MAX_READY_ITEMS = 3;
 const AUTO_SAVE_MS = 30000;
 const INPUT_LOCK_MS = 280;
 const CONFIG = {
-  customerSpawnMin: 4800,
-  customerSpawnMax: 6800,
-  minimumSpawnDelay: 1800,
-  fullCafeRetryDelay: 2400,
+  customerSpawnMin: 6200,
+  customerSpawnMax: 9200,
+  minimumSpawnDelay: 2800,
+  fullCafeRetryDelay: 3000,
+  craftingSpawnSlowdown: 1.38,
   toastDuration: 2100,
   maxToasts: 3,
+  readyItemLimit: MAX_READY_ITEMS,
+  baseCustomerPatience: 88000,
+  patiencePerDifficulty: 9000,
+  activeOrderLimits: [
+    { level: 1, max: 2 },
+    { level: 4, max: 3 },
+    { level: 7, max: 4 }
+  ],
   catWalkSpeedMin: 0.0048,
   catWalkSpeedMax: 0.0074,
   catMoveDistanceMin: 8,
@@ -33,7 +42,166 @@ const CONFIG = {
   ],
   coffeeMiniGameDuration: 7600,
   coffeePointerBaseSpeed: 0.044,
-  coffeePointerMinimumSpeed: 0.029
+  coffeePointerMinimumSpeed: 0.029,
+  bakingDuration: 7600,
+  toastDurationMs: 5400,
+  pourDuration: 5200,
+  blendDuration: 6200,
+  qualityWindows: {
+    coffee: { perfect: 10, good: 28 },
+    milk: { perfect: 9, good: 24 },
+    baking: { perfect: 10, good: 26 },
+    toast: { perfect: 11, good: 27 },
+    pour: { perfect: 8, good: 23 },
+    blend: { perfect: 9, good: 24 }
+  }
+};
+
+const QUALITY_DEFS = {
+  perfect: {
+    key: "perfect",
+    label: "Perfect",
+    tipBonus: 0.18,
+    xpBonus: 8,
+    satisfactionBonus: 0.14,
+    consumeTimeMultiplier: 0.86
+  },
+  good: {
+    key: "good",
+    label: "Good",
+    tipBonus: 0,
+    xpBonus: 0,
+    satisfactionBonus: 0,
+    consumeTimeMultiplier: 1
+  },
+  okay: {
+    key: "okay",
+    label: "Okay",
+    tipBonus: 0,
+    xpBonus: 0,
+    satisfactionBonus: 0,
+    consumeTimeMultiplier: 1.1
+  }
+};
+
+const MENU_ITEMS = {
+  americano: {
+    id: "americano",
+    name: "아메리카노",
+    category: "coffee",
+    price: 68,
+    xp: 24,
+    machine: "coffeeMachine",
+    difficulty: 1,
+    baseTime: 7600,
+    unlockLevel: 1,
+    image: "./assets/drinks/americano.webp",
+    emoji: "☕",
+    gameType: "americano"
+  },
+  toast: {
+    id: "toast",
+    name: "토스트",
+    category: "bread",
+    price: 82,
+    xp: 26,
+    machine: "oven",
+    difficulty: 1,
+    baseTime: 5400,
+    unlockLevel: 2,
+    image: "./assets/food/toast.webp",
+    emoji: "🍞",
+    gameType: "toast"
+  },
+  orangeJuice: {
+    id: "orangeJuice",
+    name: "오렌지 주스",
+    category: "juice",
+    price: 94,
+    xp: 28,
+    machine: "blender",
+    difficulty: 2,
+    baseTime: 6200,
+    unlockLevel: 3,
+    image: "./assets/drinks/orange-juice.webp",
+    emoji: "🍊",
+    gameType: "orangeJuice"
+  },
+  cafeLatte: {
+    id: "cafeLatte",
+    name: "카페라떼",
+    category: "coffee",
+    price: 108,
+    xp: 32,
+    machine: "coffeeMachine",
+    difficulty: 2,
+    baseTime: 9000,
+    unlockLevel: 4,
+    image: "./assets/drinks/latte.webp",
+    emoji: "🥛",
+    gameType: "cafeLatte"
+  },
+  croissant: {
+    id: "croissant",
+    name: "크루아상",
+    category: "bread",
+    price: 118,
+    xp: 34,
+    machine: "oven",
+    difficulty: 2,
+    baseTime: 7600,
+    unlockLevel: 5,
+    image: "./assets/food/croissant.webp",
+    emoji: "🥐",
+    gameType: "croissant"
+  },
+  strawberryJuice: {
+    id: "strawberryJuice",
+    name: "딸기 주스",
+    category: "juice",
+    price: 126,
+    xp: 36,
+    machine: "blender",
+    difficulty: 3,
+    baseTime: 7200,
+    unlockLevel: 6,
+    image: "./assets/drinks/strawberry-juice.webp",
+    emoji: "🍓",
+    gameType: "strawberryJuice"
+  }
+};
+
+const MACHINE_DATA = {
+  coffeeMachine: {
+    id: "coffeeMachine",
+    name: "커피 머신",
+    emoji: "☕",
+    category: "coffee",
+    unlockLevel: 1,
+    statusElement: "machineStatus",
+    element: "coffeeMachine",
+    sound: "coffee-brew"
+  },
+  oven: {
+    id: "oven",
+    name: "오븐",
+    emoji: "🥐",
+    category: "bread",
+    unlockLevel: 2,
+    statusElement: "ovenStatus",
+    element: "ovenMachine",
+    sound: "oven"
+  },
+  blender: {
+    id: "blender",
+    name: "블렌더",
+    emoji: "🍹",
+    category: "juice",
+    unlockLevel: 3,
+    statusElement: "blenderStatus",
+    element: "blenderMachine",
+    sound: "blender"
+  }
 };
 
 const GAME_DATA = {
@@ -143,6 +311,20 @@ const GAME_DATA = {
       price: 0,
       effect: "기본 음료 제작"
     },
+    oven: {
+      id: "oven",
+      name: "베이킹 오븐",
+      emoji: "🥐",
+      price: 0,
+      effect: "Lv.2부터 빵 메뉴 제작"
+    },
+    blender: {
+      id: "blender",
+      name: "주스 블렌더",
+      emoji: "🍹",
+      price: 0,
+      effect: "Lv.3부터 주스 메뉴 제작"
+    },
     beanGrinder: {
       id: "beanGrinder",
       name: "원두 그라인더",
@@ -168,8 +350,7 @@ const GAME_DATA = {
       tipChanceBonus: 0.1
     }
   },
-  customerEmojis: ["🙂", "😊", "😌", "🤎", "🧑", "👩", "👨"],
-  orders: ["카페라떼", "아메리카노", "바닐라 라떼", "카푸치노"]
+  customerEmojis: ["🙂", "😊", "😌", "🤎", "🧑", "👩", "👨"]
 };
 
 const DEFAULT_STATE = {
@@ -179,10 +360,15 @@ const DEFAULT_STATE = {
   totalSales: 0,
   ownedCats: ["cheese"],
   ownedFurniture: [],
-  ownedEquipment: ["basicMachine"],
+  ownedEquipment: ["basicMachine", "oven", "blender"],
+  unlockedMenus: ["americano"],
+  tutorialSeen: {},
+  readyItems: [],
   upgrades: {
     tables: 2,
     coffeeMachine: 1,
+    oven: 1,
+    blender: 1,
     interior: 1,
     visitSpeed: 1
   }
@@ -193,10 +379,12 @@ const runtime = {
   customerId: 0,
   readyDrinks: 0,
   readyDrinkQueue: [],
+  readyItems: [],
   isBrewing: false,
   brewStart: 0,
   brewEnd: 0,
   coffeeMiniGame: null,
+  miniGame: null,
   nextCustomerAt: 0,
   nextEventAt: 0,
   influencerUntil: 0,
@@ -229,8 +417,11 @@ function initGame() {
   }
   bindEvents();
   normalizeState();
+  hydrateRuntimeReadyItems();
+  updateMenuUnlocks(false);
   initializeCats();
   renderAll();
+  hydrateObjectAssets();
   const now = performance.now();
   runtime.nextCustomerAt = now + 900;
   runtime.nextEventAt = now + randomBetween(18000, 26000);
@@ -255,14 +446,22 @@ function cacheElements() {
     customerLayer: document.getElementById("customerLayer"),
     catLayer: document.getElementById("catLayer"),
     floatingLayer: document.getElementById("floatingLayer"),
+    orderList: document.getElementById("orderList"),
+    readyShelf: document.getElementById("readyShelf"),
     coffeeMachine: document.getElementById("coffeeMachine"),
+    ovenMachine: document.getElementById("ovenMachine"),
+    blenderMachine: document.getElementById("blenderMachine"),
+    bakeryShowcase: document.getElementById("bakeryShowcase"),
     machineStatus: document.getElementById("machineStatus"),
+    ovenStatus: document.getElementById("ovenStatus"),
+    blenderStatus: document.getElementById("blenderStatus"),
     machineProgressFill: document.getElementById("machineProgressFill"),
     cupEventButton: document.getElementById("cupEventButton"),
     tableSummary: document.getElementById("tableSummary"),
     drinkSummary: document.getElementById("drinkSummary"),
     customerSummary: document.getElementById("customerSummary"),
     salesSummary: document.getElementById("salesSummary"),
+    missionChip: document.getElementById("missionChip"),
     quickSaveButton: document.getElementById("quickSaveButton"),
     openShopButton: document.getElementById("openShopButton"),
     openCatsButton: document.getElementById("openCatsButton"),
@@ -284,29 +483,26 @@ function cacheElements() {
     coffeeConfirm: document.getElementById("coffeeConfirm"),
     coffeeKeepButton: document.getElementById("coffeeKeepButton"),
     coffeeConfirmCancelButton: document.getElementById("coffeeConfirmCancelButton"),
+    coffeeMiniGameTitle: document.getElementById("coffeeMiniGameTitle"),
     coffeeMiniGameSubtitle: document.getElementById("coffeeMiniGameSubtitle"),
+    miniGameVisual: document.getElementById("miniGameVisual"),
+    miniGameProp: document.getElementById("miniGameProp"),
+    miniGameIcon: document.getElementById("miniGameIcon"),
+    miniGameSteps: document.getElementById("miniGameSteps"),
+    miniGameBody: document.getElementById("miniGameBody"),
+    miniGameActionButton: document.getElementById("miniGameActionButton"),
+    miniGameSecondaryButton: document.getElementById("miniGameSecondaryButton"),
     coffeeStream: document.getElementById("coffeeStream"),
-    coffeeResultBadge: document.getElementById("coffeeResultBadge"),
-    coffeeStepBeans: document.getElementById("coffeeStepBeans"),
-    coffeeStepExtract: document.getElementById("coffeeStepExtract"),
-    coffeeStepFinish: document.getElementById("coffeeStepFinish"),
-    coffeeBeanStep: document.getElementById("coffeeBeanStep"),
-    coffeeExtractStep: document.getElementById("coffeeExtractStep"),
-    coffeeFinishStep: document.getElementById("coffeeFinishStep"),
-    addBeansButton: document.getElementById("addBeansButton"),
-    startExtractionButton: document.getElementById("startExtractionButton"),
-    stopExtractionButton: document.getElementById("stopExtractionButton"),
-    timingPointer: document.getElementById("timingPointer"),
-    extractionProgressFill: document.getElementById("extractionProgressFill"),
-    coffeeFinishTitle: document.getElementById("coffeeFinishTitle"),
-    coffeeFinishText: document.getElementById("coffeeFinishText"),
-    coffeeDoneButton: document.getElementById("coffeeDoneButton")
+    coffeeResultBadge: document.getElementById("coffeeResultBadge")
   };
 }
 
 function bindEvents() {
   if (runtime.eventsBound) return;
   bindPointer(els.coffeeMachine, handleMachineClick);
+  bindPointer(els.ovenMachine, handleMachineClick);
+  bindPointer(els.blenderMachine, handleMachineClick);
+  bindPointer(els.bakeryShowcase, handleShowcaseClick);
   bindPointer(els.customerLayer, handleCustomerClick);
   bindPointer(els.catLayer, handleCatClick);
   bindPointer(els.cupEventButton, collectCupEvent);
@@ -325,10 +521,8 @@ function bindEvents() {
   bindPointer(els.coffeeCancelButton, cancelCoffeeMiniGame);
   bindPointer(els.coffeeKeepButton, hideCoffeeCancelConfirm);
   bindPointer(els.coffeeConfirmCancelButton, confirmCancelCoffeeMiniGame);
-  bindPointer(els.addBeansButton, addBeansToMachine);
-  bindPointer(els.startExtractionButton, startExtraction);
-  bindPointer(els.stopExtractionButton, stopExtraction);
-  bindPointer(els.coffeeDoneButton, closeCoffeeMiniGame);
+  bindPointer(els.miniGameActionButton, (event) => MiniGameManager.primaryAction(event));
+  bindPointer(els.miniGameSecondaryButton, (event) => MiniGameManager.secondaryAction(event));
 
   document.querySelectorAll("[data-close-modal]").forEach((button) => {
     bindPointer(button, () => closeModal(button.dataset.closeModal));
@@ -358,6 +552,10 @@ function bindEvents() {
         return;
       }
       closeAllModals();
+    }
+    if (event.code === "Space" && !els.coffeeModal.classList.contains("hidden")) {
+      event.preventDefault();
+      MiniGameManager.primaryAction(event);
     }
   });
   runtime.eventsBound = true;
@@ -393,12 +591,17 @@ function loadGame() {
       saveVersion: parsed.saveVersion || SAVE_VERSION,
       ownedCats: sanitizeOwnedIds(parsed.ownedCats, GAME_DATA.cats, ["cheese"]),
       ownedFurniture: sanitizeOwnedIds(parsed.ownedFurniture, GAME_DATA.furniture, []),
-      ownedEquipment: sanitizeOwnedIds(parsed.ownedEquipment, GAME_DATA.equipment, ["basicMachine"]),
+      ownedEquipment: sanitizeOwnedIds(parsed.ownedEquipment, GAME_DATA.equipment, DEFAULT_STATE.ownedEquipment),
+      unlockedMenus: sanitizeMenuIds(parsed.unlockedMenus, getMenuIdsUnlockedByLevel(parsed.level || DEFAULT_STATE.level)),
+      tutorialSeen: parsed.tutorialSeen && typeof parsed.tutorialSeen === "object" ? parsed.tutorialSeen : {},
+      readyItems: sanitizeReadyItems(parsed.readyItems || migrateReadyDrinks(parsed.readyDrinkQueue)),
       upgrades: {
         ...DEFAULT_STATE.upgrades,
         ...(typeof parsed.upgrades === "object" && parsed.upgrades ? parsed.upgrades : {}),
         tables: parsed.tableCount || parsed.upgrades?.tables || DEFAULT_STATE.upgrades.tables,
-        coffeeMachine: parsed.coffeeMachineLevel || parsed.upgrades?.coffeeMachine || DEFAULT_STATE.upgrades.coffeeMachine
+        coffeeMachine: parsed.coffeeMachineLevel || parsed.upgrades?.coffeeMachine || DEFAULT_STATE.upgrades.coffeeMachine,
+        oven: parsed.ovenLevel || parsed.upgrades?.oven || DEFAULT_STATE.upgrades.oven,
+        blender: parsed.blenderLevel || parsed.upgrades?.blender || DEFAULT_STATE.upgrades.blender
       }
     };
   } catch (error) {
@@ -413,8 +616,11 @@ function saveGame() {
     const payload = {
       ...state,
       saveVersion: SAVE_VERSION,
+      readyItems: sanitizeReadyItems(runtime.readyItems),
       tableCount: state.upgrades.tables,
       coffeeMachineLevel: state.upgrades.coffeeMachine,
+      ovenLevel: state.upgrades.oven,
+      blenderLevel: state.upgrades.blender,
       savedAt: new Date().toISOString()
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -431,17 +637,25 @@ function normalizeState() {
   };
   state.ownedCats = sanitizeOwnedIds(state.ownedCats, GAME_DATA.cats, ["cheese"]);
   state.ownedFurniture = sanitizeOwnedIds(state.ownedFurniture, GAME_DATA.furniture, []);
-  state.ownedEquipment = sanitizeOwnedIds(state.ownedEquipment, GAME_DATA.equipment, ["basicMachine"]);
+  state.ownedEquipment = sanitizeOwnedIds(state.ownedEquipment, GAME_DATA.equipment, DEFAULT_STATE.ownedEquipment);
+  const levelUnlockedMenus = getMenuIdsUnlockedByLevel(state.level || DEFAULT_STATE.level);
+  state.unlockedMenus = sanitizeMenuIds(state.unlockedMenus, levelUnlockedMenus).filter((id) => levelUnlockedMenus.includes(id));
+  state.tutorialSeen = state.tutorialSeen && typeof state.tutorialSeen === "object" ? state.tutorialSeen : {};
+  state.readyItems = sanitizeReadyItems(state.readyItems);
   state.coins = sanitizeInteger(state.coins, DEFAULT_STATE.coins, 0);
   state.level = sanitizeInteger(state.level, DEFAULT_STATE.level, 1);
   state.xp = sanitizeInteger(state.xp, DEFAULT_STATE.xp, 0);
   state.totalSales = sanitizeInteger(state.totalSales, DEFAULT_STATE.totalSales, 0);
   state.upgrades.tables = clamp(Math.floor(Number(state.upgrades.tables) || 2), 2, MAX_TABLES);
   state.upgrades.coffeeMachine = Math.max(1, Math.floor(Number(state.upgrades.coffeeMachine) || 1));
+  state.upgrades.oven = Math.max(1, Math.floor(Number(state.upgrades.oven) || 1));
+  state.upgrades.blender = Math.max(1, Math.floor(Number(state.upgrades.blender) || 1));
   state.upgrades.interior = Math.max(1, Math.floor(Number(state.upgrades.interior) || 1));
   state.upgrades.visitSpeed = Math.max(1, Math.floor(Number(state.upgrades.visitSpeed) || 1));
   if (!state.ownedCats.includes("cheese")) state.ownedCats.unshift("cheese");
   if (!state.ownedEquipment.includes("basicMachine")) state.ownedEquipment.unshift("basicMachine");
+  if (!state.ownedEquipment.includes("oven")) state.ownedEquipment.push("oven");
+  if (!state.ownedEquipment.includes("blender")) state.ownedEquipment.push("blender");
 }
 
 function gameLoop(timestamp) {
@@ -461,6 +675,8 @@ function renderAll() {
   renderFurniture();
   renderCustomers();
   renderCats();
+  renderCurrentOrders();
+  renderReadyShelf();
   renderUpgrades();
   renderShop();
   renderCatCollection();
@@ -474,9 +690,12 @@ function renderHud() {
   els.xpLabel.textContent = `${state.xp} / ${xpToNext} XP`;
   els.xpFill.style.width = `${xpPercent}%`;
   els.tableSummary.textContent = `${state.upgrades.tables}개`;
-  els.drinkSummary.textContent = `${runtime.readyDrinks}잔`;
+  els.drinkSummary.textContent = `${runtime.readyItems.length}개`;
   els.customerSummary.textContent = `${runtime.customers.filter((customer) => customer.status !== "leaving").length}명`;
   els.salesSummary.textContent = `${state.totalSales}회`;
+  if (els.missionChip) {
+    els.missionChip.textContent = `🎯 ${state.totalSales % 5}/5`;
+  }
   updateMachineStatus();
 }
 
@@ -514,7 +733,14 @@ function updateTimedHud(timestamp) {
 function renderTables() {
   const positions = getTablePositions(state.upgrades.tables);
   els.tableLayer.innerHTML = positions.map((position, index) => (
-    `<div class="table" style="left:${position.x}%; top:${position.y}%;" data-label="T${index + 1}" aria-label="테이블 ${index + 1}"></div>`
+    `<div class="table" style="left:${position.x}%; top:${position.y}%; z-index:${getDepthIndex(position.y, 3)};" aria-label="테이블 ${index + 1}">
+      <span class="chair chair-back" aria-hidden="true"></span>
+      <span class="chair chair-left" aria-hidden="true"></span>
+      <span class="chair chair-right" aria-hidden="true"></span>
+      <span class="table-leg table-leg-left" aria-hidden="true"></span>
+      <span class="table-leg table-leg-right" aria-hidden="true"></span>
+      <span class="table-top" aria-hidden="true"></span>
+    </div>`
   )).join("");
 }
 
@@ -523,9 +749,12 @@ function renderFurniture() {
     .map((id) => GAME_DATA.furniture[id])
     .filter(Boolean)
     .map((item) => (
-      `<div class="furniture-prop" style="left:${item.x}%; top:${item.y}%;" title="${item.name}">${item.emoji}</div>`
+      `<div class="furniture-prop furniture-${item.id}" style="left:${item.x}%; top:${item.y}%; z-index:${getDepthIndex(item.y, 2)};" title="${item.name}" data-asset="./assets/furniture/${item.id}.webp">
+        <span class="object-sprite" data-fallback="${item.emoji}" aria-hidden="true"></span>
+      </div>`
     ));
   els.furnitureLayer.innerHTML = items.join("");
+  hydrateObjectAssets(els.furnitureLayer);
 }
 
 function renderCustomers() {
@@ -538,9 +767,13 @@ function renderCustomers() {
     const className = `customer status-${customer.status}${customer.status === "leaving" ? " leaving" : ""}`;
     const status = getCustomerStatus(customer);
     const lucky = customer.lucky ? `<span class="lucky-tag">★ 행운</span>` : "";
+    const orderBubble = customer.order && customer.status !== "seating" && customer.status !== "leaving"
+      ? `<span class="order-bubble" aria-hidden="true">${getOrderShortText(customer.order)}</span>`
+      : "";
     return `
-      <div class="${className}" style="left:${x}%; top:${y}%;" data-customer-id="${customer.id}">
+      <div class="${className}" style="left:${x}%; top:${y}%; z-index:${getDepthIndex(y, 8)};" data-customer-id="${customer.id}">
         <button type="button" aria-label="${status.aria}">
+          ${orderBubble}
           <span class="status-bubble" aria-hidden="true">${status.icon}</span>
           <span class="customer-emoji" aria-hidden="true">${customer.emoji}</span>
           <span class="customer-name">${status.label}</span>
@@ -569,7 +802,7 @@ function renderCats() {
     const spriteLoaded = runtime.catSpriteCache[spritePath] === "loaded";
     const imageSource = spriteLoaded ? `src="${spritePath}"` : `data-src="${spritePath}"`;
     return `
-      <div class="cat cat-${actor.mode} facing-${actor.direction}" style="left:${actor.x}%; top:${actor.y}%;" data-cat-id="${cat.id}">
+      <div class="cat cat-${actor.mode} facing-${actor.direction}" style="left:${actor.x}%; top:${actor.y}%; z-index:${getDepthIndex(actor.y, 9)};" data-cat-id="${cat.id}">
         <button type="button" aria-label="${cat.name} 쓰다듬기">
           ${sleepMark}
           <span class="cat-sprite" data-image="${spritePath}" aria-hidden="true">
@@ -617,6 +850,55 @@ function requestCatSprite(path) {
     runtime.catSpriteCache[path] = "missing";
   };
   image.src = path;
+}
+
+function renderCurrentOrders() {
+  if (!els.orderList) return;
+  const orderedCustomers = runtime.customers.filter((customer) => customer.status === "ordered");
+  if (orderedCustomers.length === 0) {
+    els.orderList.textContent = "대기 중";
+    return;
+  }
+
+  const counts = orderedCustomers.reduce((map, customer) => {
+    const item = getMenuItem(customer.order?.itemId);
+    if (!item) return map;
+    map[item.id] = (map[item.id] || 0) + 1;
+    return map;
+  }, {});
+
+  els.orderList.innerHTML = Object.entries(counts).map(([itemId, count]) => {
+    const item = MENU_ITEMS[itemId];
+    return `<span class="order-chip">${item.emoji} ${item.name}${count > 1 ? ` x${count}` : ""}</span>`;
+  }).join("");
+}
+
+function renderReadyShelf() {
+  if (!els.readyShelf) return;
+  if (runtime.readyItems.length === 0) {
+    els.readyShelf.innerHTML = `<span class="shelf-label">완성 보관대</span>`;
+    return;
+  }
+
+  els.readyShelf.innerHTML = runtime.readyItems.map((readyItem, index) => {
+    const item = getMenuItem(readyItem.itemId);
+    if (!item) return "";
+    const quality = getQualityDef(readyItem.quality);
+    return `
+      <span class="ready-food ready-${item.category} food-${item.id} ${index % 2 ? "ready-offset" : ""}" title="${item.name} ${quality.label}">
+        <span class="ready-food-icon" aria-hidden="true">
+          <span class="food-cup css-object-part"></span>
+          <span class="food-liquid css-object-part"></span>
+          <span class="food-foam css-object-part"></span>
+          <span class="food-plate css-object-part"></span>
+          <span class="food-bread css-object-part"></span>
+          <span class="food-straw css-object-part"></span>
+          <span class="emoji-fallback">${item.emoji}</span>
+        </span>
+        <span class="ready-food-quality">${quality.label[0]}</span>
+      </span>
+    `;
+  }).join("");
 }
 
 function renderShop() {
@@ -671,14 +953,14 @@ function renderUpgrades() {
   const upgrades = getUpgradeDefinitions();
   const markup = upgrades.map((upgrade) => {
     const disabled = upgrade.disabled || state.coins < upgrade.cost ? "disabled" : "";
-    const label = upgrade.disabled ? "최대" : `${formatNumber(upgrade.cost)}코인`;
+    const label = upgrade.locked ? `Lv.${upgrade.unlockLevel}` : upgrade.maxed ? "최대" : `${formatNumber(upgrade.cost)}코인`;
     return `
       <article class="upgrade-item">
         <div class="upgrade-copy">
           <strong>${upgrade.name}</strong>
           <span>${upgrade.description}</span>
         </div>
-        <button class="upgrade-button ${upgrade.disabled ? "maxed" : ""}" type="button" data-upgrade-id="${upgrade.id}" ${disabled}>
+        <button class="upgrade-button ${upgrade.maxed ? "maxed" : ""} ${upgrade.locked ? "locked" : ""}" type="button" data-upgrade-id="${upgrade.id}" ${disabled}>
           ${label}
         </button>
       </article>
@@ -690,248 +972,720 @@ function renderUpgrades() {
 
 function handleMachineClick(event) {
   event.preventDefault();
-  if (isActionLocked("machine")) return;
-  if (runtime.coffeeMiniGame) {
+  const machineKey = event.currentTarget?.dataset?.machineKey || "coffeeMachine";
+  if (isActionLocked(`machine-${machineKey}`)) return;
+  const machine = MACHINE_DATA[machineKey];
+  if (!machine) return;
+
+  if (runtime.miniGame) {
     openModal("coffeeModal");
-    renderCoffeeMiniGame();
+    renderMiniGame();
     return;
   }
 
-  if (runtime.readyDrinks >= MAX_READY_DRINKS) {
-    showToast(`완성 음료는 최대 ${MAX_READY_DRINKS}잔까지 보관할 수 있습니다.`);
+  if (!isMachineUnlocked(machineKey)) {
+    showToast(`${machine.emoji} ${machine.name}은 Lv.${machine.unlockLevel}에 사용할 수 있습니다.`);
     return;
   }
 
-  const waitingForDrink = runtime.customers.filter((customer) => customer.status === "ordered").length;
-  if (waitingForDrink <= runtime.readyDrinks) {
-    showToast("주문을 먼저 받은 뒤 음료를 제작하세요.");
+  if (runtime.readyItems.length >= CONFIG.readyItemLimit) {
+    showToast(`완성 음식은 최대 ${CONFIG.readyItemLimit}개까지 보관할 수 있습니다.`);
     return;
   }
 
-  startCoffeeMiniGame();
+  const item = findNextCraftableItem(machineKey);
+  if (!item) {
+    showToast(`${machine.emoji} ${machine.name}로 만들 주문이 아직 없습니다.`);
+    return;
+  }
+
+  MiniGameManager.start(item.id);
+}
+
+function handleShowcaseClick(event) {
+  event.preventDefault();
+  if (isActionLocked("bakery-showcase")) return;
+  const unlockedBread = getUnlockedMenuItems().filter((item) => item.category === "bread");
+  const readyBreadCount = runtime.readyItems.filter((item) => getMenuItem(item.itemId)?.category === "bread").length;
+  const menuText = unlockedBread.length > 0
+    ? unlockedBread.map((item) => `${item.emoji} ${item.name}`).join(", ")
+    : "Lv.2부터 토스트가 해금됩니다.";
+  showToast(`베이커리 쇼케이스: ${menuText}${readyBreadCount ? ` · 완성 빵 ${readyBreadCount}개` : ""}`);
 }
 
 function updateBrewing(timestamp) {
-  updateCoffeeMiniGame(timestamp);
+  MiniGameManager.update(timestamp);
 }
 
 function updateMachineStatus() {
-  els.coffeeMachine.classList.toggle("brewing", runtime.isBrewing);
-  els.coffeeMachine.classList.toggle("ready", !runtime.isBrewing && runtime.readyDrinks > 0);
-  if (runtime.coffeeMiniGame) {
-    const labels = {
-      beans: "원두 준비",
-      readyToExtract: "추출 준비",
-      extracting: "추출 중",
-      complete: "완성"
-    };
-    els.machineStatus.textContent = labels[runtime.coffeeMiniGame.step] || "제조 중";
-    return;
-  }
-  if (runtime.readyDrinks > 0) {
-    els.machineStatus.textContent = `☕ 음료 완성! ${runtime.readyDrinks}잔`;
-    return;
-  }
-  els.machineStatus.textContent = "주문 대기";
-  els.machineProgressFill.style.width = "0%";
-}
-
-function startCoffeeMiniGame() {
-  const now = performance.now();
-  const settings = getCoffeeMiniGameSettings();
-  runtime.isBrewing = true;
-  runtime.brewStart = now;
-  runtime.brewEnd = 0;
-  runtime.coffeeMiniGame = {
-    step: "beans",
-    pointer: 50,
-    pointerDirection: 1,
-    pointerSpeed: settings.pointerSpeed,
-    extractionDuration: settings.duration,
-    extractionStart: 0,
-    extractionEnd: 0,
-    quality: null
-  };
-  openModal("coffeeModal");
-  renderCoffeeMiniGame();
-  updateMachineStatus();
-  showToast("커피 제조를 시작합니다.");
-}
-
-function addBeansToMachine(event) {
-  event.preventDefault();
-  const miniGame = runtime.coffeeMiniGame;
-  if (!miniGame || miniGame.step !== "beans") return;
-  miniGame.step = "readyToExtract";
-  renderCoffeeMiniGame();
-  showToast("원두를 넣었습니다.");
-}
-
-function startExtraction(event) {
-  event.preventDefault();
-  const miniGame = runtime.coffeeMiniGame;
-  if (!miniGame || miniGame.step !== "readyToExtract") return;
-  const now = performance.now();
-  miniGame.step = "extracting";
-  miniGame.extractionStart = now;
-  miniGame.extractionEnd = now + miniGame.extractionDuration;
-  miniGame.pointer = 50;
-  miniGame.pointerDirection = Math.random() < 0.5 ? -1 : 1;
-  runtime.brewStart = miniGame.extractionStart;
-  runtime.brewEnd = miniGame.extractionEnd;
-  renderCoffeeMiniGame();
-  updateMachineStatus();
-}
-
-function stopExtraction(event) {
-  event.preventDefault();
-  const miniGame = runtime.coffeeMiniGame;
-  if (!miniGame || miniGame.step !== "extracting") return;
-  finishCoffee(calculateCoffeeQuality(miniGame.pointer));
-}
-
-function updateCoffeeMiniGame(timestamp) {
-  const miniGame = runtime.coffeeMiniGame;
-  if (!miniGame || miniGame.step !== "extracting") return;
-
-  const delta = runtime.brewStart ? Math.min(80, timestamp - (miniGame.lastUpdate || timestamp)) : 16;
-  miniGame.lastUpdate = timestamp;
-  miniGame.pointer += miniGame.pointerDirection * miniGame.pointerSpeed * delta;
-  if (miniGame.pointer >= 100) {
-    miniGame.pointer = 100;
-    miniGame.pointerDirection = -1;
-  }
-  if (miniGame.pointer <= 0) {
-    miniGame.pointer = 0;
-    miniGame.pointerDirection = 1;
-  }
-
-  const progress = clamp((timestamp - miniGame.extractionStart) / Math.max(1, miniGame.extractionEnd - miniGame.extractionStart), 0, 1);
-  els.timingPointer.style.left = `${miniGame.pointer}%`;
-  els.extractionProgressFill.style.width = `${progress * 100}%`;
-  els.machineProgressFill.style.width = `${progress * 100}%`;
-  els.machineStatus.textContent = `추출 중 ${Math.round(progress * 100)}%`;
-
-  if (timestamp >= miniGame.extractionEnd) {
-    finishCoffee(calculateCoffeeQuality(miniGame.pointer, true));
-  }
-}
-
-function finishCoffee(quality) {
-  const miniGame = runtime.coffeeMiniGame;
-  if (!miniGame || miniGame.step === "complete") return;
-  miniGame.step = "complete";
-  miniGame.quality = quality;
-  runtime.isBrewing = false;
-  runtime.readyDrinkQueue.push({
-    ...quality,
-    createdAt: Date.now()
+  Object.values(MACHINE_DATA).forEach((machine) => {
+    const node = els[machine.element];
+    const status = els[machine.statusElement];
+    if (!node || !status) return;
+    const locked = !isMachineUnlocked(machine.id);
+    const active = runtime.miniGame?.machine === machine.id && !runtime.miniGame.finished;
+    const pendingCount = getPendingOrderCountForMachine(machine.id);
+    const readyCount = runtime.readyItems.filter((item) => getMenuItem(item.itemId)?.machine === machine.id).length;
+    node.classList.toggle("locked", locked);
+    node.classList.toggle("brewing", active);
+    node.classList.toggle("ready", !active && readyCount > 0);
+    if (locked) {
+      status.textContent = `Lv.${machine.unlockLevel} 해금`;
+    } else if (active) {
+      status.textContent = getMiniGamePhaseLabel(runtime.miniGame);
+    } else if (pendingCount > 0) {
+      status.textContent = `${pendingCount}개 주문`;
+    } else if (readyCount > 0) {
+      status.textContent = `${readyCount}개 완성`;
+    } else {
+      status.textContent = "주문 대기";
+    }
   });
-  syncReadyDrinkCount();
+
+  if (!runtime.miniGame || runtime.miniGame.machine !== "coffeeMachine") {
+    els.machineProgressFill.style.width = "0%";
+  }
+}
+
+const MiniGameManager = {
+  start(itemId) {
+    const item = getMenuItem(itemId);
+    if (!item || !isMenuUnlocked(item.id) || !isMachineUnlocked(item.machine)) return;
+    cleanupMiniGame();
+    const game = {
+      itemId: item.id,
+      machine: item.machine,
+      category: item.category,
+      gameType: item.gameType,
+      phase: "setup",
+      pointer: 50,
+      direction: 1,
+      speed: getMachinePointerSpeed(item.machine),
+      progress: 0,
+      phaseStartedAt: 0,
+      phaseEndsAt: 0,
+      target: 50,
+      gaugeKind: "step",
+      scores: [],
+      quality: null,
+      lastUpdate: 0,
+      finished: false
+    };
+    runtime.miniGame = game;
+    runtime.coffeeMiniGame = game;
+    runtime.isBrewing = true;
+    runtime.brewStart = performance.now();
+
+    if (item.category === "coffee") startCoffeeGame(game);
+    if (item.category === "bread") startBreadGame(game);
+    if (item.category === "juice") startJuiceGame(game);
+
+    openModal("coffeeModal");
+    renderMiniGame();
+    updateMachineStatus();
+    showMachineTutorial(item.machine);
+    SoundManager.play(MACHINE_DATA[item.machine]?.sound);
+    showToast(`${item.emoji} ${item.name} 제조를 시작합니다.`);
+  },
+
+  update(timestamp) {
+    const game = runtime.miniGame;
+    if (!game || game.finished || !isTimedPhase(game.phase)) return;
+
+    const delta = Math.min(80, timestamp - (game.lastUpdate || timestamp));
+    game.lastUpdate = timestamp;
+
+    if (game.gaugeKind === "timing" || game.gaugeKind === "milk") {
+      game.pointer += game.direction * game.speed * delta;
+      if (game.pointer >= 100) {
+        game.pointer = 100;
+        game.direction = -1;
+      }
+      if (game.pointer <= 0) {
+        game.pointer = 0;
+        game.direction = 1;
+      }
+    } else {
+      game.progress = clamp((timestamp - game.phaseStartedAt) / Math.max(1, game.phaseEndsAt - game.phaseStartedAt) * 100, 0, 100);
+    }
+
+    const activeProgress = game.gaugeKind === "timing" || game.gaugeKind === "milk"
+      ? clamp((timestamp - game.phaseStartedAt) / Math.max(1, game.phaseEndsAt - game.phaseStartedAt) * 100, 0, 100)
+      : game.progress;
+    if (game.machine === "coffeeMachine") {
+      els.machineProgressFill.style.width = `${activeProgress}%`;
+    }
+    updateMiniGameLive();
+
+    if (timestamp >= game.phaseEndsAt) {
+      completeActivePhase(true);
+    }
+  },
+
+  primaryAction(event) {
+    event?.preventDefault?.();
+    const game = runtime.miniGame;
+    if (!game) return;
+    if (game.finished || game.phase === "complete") {
+      closeCoffeeMiniGame(event);
+      return;
+    }
+
+    if (game.phase === "beans") {
+      setMiniGamePhase(game, "extractReady");
+      showToast("원두를 넣었습니다.");
+      return;
+    }
+    if (game.phase === "extractReady") {
+      beginTimingPhase(game, "extracting", 50, getMiniGameDuration(game, "extracting"), "timing");
+      return;
+    }
+    if (game.phase === "extracting") {
+      completeActivePhase(false);
+      return;
+    }
+    if (game.phase === "milkReady") {
+      beginTimingPhase(game, "milk", 64, 5200, "milk");
+      return;
+    }
+    if (game.phase === "milk") {
+      completeActivePhase(false);
+      return;
+    }
+    if (game.phase === "dough") {
+      setMiniGamePhase(game, "ovenReady");
+      return;
+    }
+    if (game.phase === "ovenReady") {
+      beginProgressPhase(game, "baking", 66, getMiniGameDuration(game, "baking"), "baking");
+      return;
+    }
+    if (game.phase === "baking") {
+      completeActivePhase(false);
+      return;
+    }
+    if (game.phase === "bread") {
+      beginProgressPhase(game, "toasting", 58, getMiniGameDuration(game, "toasting"), "toast");
+      return;
+    }
+    if (game.phase === "toasting") {
+      completeActivePhase(false);
+      return;
+    }
+    if (game.phase === "orange") {
+      setMiniGamePhase(game, "extractJuice");
+      return;
+    }
+    if (game.phase === "extractJuice") {
+      beginProgressPhase(game, "pouring", 72, getMiniGameDuration(game, "pouring"), "pour");
+      return;
+    }
+    if (game.phase === "pouring") {
+      completeActivePhase(false);
+      return;
+    }
+    if (game.phase === "strawberry") {
+      setMiniGamePhase(game, "liquid");
+      return;
+    }
+    if (game.phase === "liquid") {
+      setMiniGamePhase(game, "blendReady");
+      return;
+    }
+    if (game.phase === "blendReady") {
+      beginProgressPhase(game, "blending", 62, getMiniGameDuration(game, "blending"), "blend");
+      return;
+    }
+    if (game.phase === "blending") {
+      completeActivePhase(false);
+      return;
+    }
+    if (game.phase === "pourReady") {
+      finishMiniGame(game, combineQualities(game.scores));
+    }
+  },
+
+  secondaryAction(event) {
+    event?.preventDefault?.();
+    closeCoffeeMiniGame(event);
+  }
+};
+
+function startCoffeeGame(game) {
+  setMiniGamePhase(game, "beans");
+}
+
+function startBreadGame(game) {
+  setMiniGamePhase(game, game.gameType === "croissant" ? "dough" : "bread");
+}
+
+function startJuiceGame(game) {
+  setMiniGamePhase(game, game.gameType === "orangeJuice" ? "orange" : "strawberry");
+}
+
+function setMiniGamePhase(game, phase) {
+  game.phase = phase;
+  game.gaugeKind = "step";
+  game.progress = 0;
+  game.pointer = 50;
+  game.lastUpdate = 0;
+  game.phaseStartedAt = 0;
+  game.phaseEndsAt = 0;
+  renderMiniGame();
+  updateMachineStatus();
+}
+
+function beginTimingPhase(game, phase, target, duration, gaugeKind) {
+  const now = performance.now();
+  game.phase = phase;
+  game.target = target;
+  game.pointer = 50;
+  game.direction = Math.random() < 0.5 ? -1 : 1;
+  game.speed = getMachinePointerSpeed(game.machine);
+  game.gaugeKind = gaugeKind;
+  game.phaseStartedAt = now;
+  game.phaseEndsAt = now + duration;
+  game.lastUpdate = now;
+  runtime.brewStart = now;
+  runtime.brewEnd = game.phaseEndsAt;
+  renderMiniGame();
+  updateMachineStatus();
+}
+
+function beginProgressPhase(game, phase, target, duration, gaugeKind) {
+  const now = performance.now();
+  game.phase = phase;
+  game.target = target;
+  game.progress = 0;
+  game.gaugeKind = gaugeKind;
+  game.phaseStartedAt = now;
+  game.phaseEndsAt = now + duration;
+  game.lastUpdate = now;
+  runtime.brewStart = now;
+  runtime.brewEnd = game.phaseEndsAt;
+  renderMiniGame();
+  updateMachineStatus();
+}
+
+function completeActivePhase(timedOut) {
+  const game = runtime.miniGame;
+  if (!game || !isTimedPhase(game.phase)) return;
+  const value = game.gaugeKind === "timing" || game.gaugeKind === "milk" ? game.pointer : game.progress;
+  const quality = calculateQuality(getQualityKindForPhase(game.phase), value, game.target, timedOut);
+  game.scores.push(quality.key);
+
+  if (game.phase === "extracting" && game.gameType === "cafeLatte") {
+    setMiniGamePhase(game, "milkReady");
+    return;
+  }
+  if (game.phase === "blending") {
+    setMiniGamePhase(game, "pourReady");
+    return;
+  }
+
+  finishMiniGame(game, combineQualities(game.scores));
+}
+
+function finishMiniGame(game, quality) {
+  if (!game || game.finished) return;
+  const item = getMenuItem(game.itemId);
+  if (!item) return;
+  game.finished = true;
+  game.phase = "complete";
+  game.quality = quality;
+  runtime.isBrewing = false;
+  runtime.brewStart = 0;
+  runtime.brewEnd = 0;
+
+  if (runtime.readyItems.length < CONFIG.readyItemLimit) {
+    runtime.readyItems.push({
+      itemId: item.id,
+      category: item.category,
+      quality: quality.key,
+      createdAt: Date.now()
+    });
+  }
+  syncReadyItemCount();
   els.machineProgressFill.style.width = "0%";
-  showFloatingText(els.cafeStage, `${quality.label} ☕`, 18, 23);
-  showToast(`${quality.label} 커피가 완성되었습니다.`);
-  renderCoffeeMiniGame();
+  showFloatingText(els.cafeStage, `${quality.label} ${item.emoji}`, getMachineFloatX(item.machine), getMachineFloatY(item.machine));
+  showToast(`${quality.label} ${item.name} 완성! 보관대에 놓았습니다.`);
+  SoundManager.play("success");
+  renderMiniGame();
+  renderReadyShelf();
+  renderCurrentOrders();
   renderHud();
   saveGame();
 }
 
-function calculateCoffeeQuality(pointer, timedOut = false) {
-  const distance = Math.abs(pointer - 50);
-  if (!timedOut && distance <= getCoffeeMiniGameSettings().perfectWindow / 2) {
-    return {
-      key: "perfect",
-      label: "Perfect",
-      revenueMultiplier: 1.12,
-      tipBonus: 0.18,
-      xpBonus: 8,
-      drinkTimeMultiplier: 0.86
-    };
+function renderMiniGame() {
+  const game = runtime.miniGame;
+  if (!game) return;
+  const item = getMenuItem(game.itemId);
+  const quality = game.quality ? getQualityDef(game.quality) : null;
+  els.coffeeConfirm.classList.add("hidden");
+  els.coffeeMiniGameTitle.textContent = `${item.emoji} ${item.name} 제조`;
+  els.coffeeMiniGameSubtitle.textContent = getMiniGameStepText(game, quality);
+  els.miniGameIcon.textContent = item.emoji;
+  els.miniGameVisual.dataset.category = item.category;
+  els.miniGameVisual.dataset.phase = game.phase;
+  els.coffeeStream.classList.toggle("running", game.phase === "extracting" || game.phase === "pouring");
+  els.coffeeResultBadge.textContent = quality?.label || (isTimedPhase(game.phase) ? "PLAY" : "READY");
+  els.coffeeResultBadge.dataset.quality = quality?.key || "";
+  renderMiniGameSteps(game);
+  els.miniGameBody.innerHTML = getMiniGameBodyMarkup(game, quality);
+  els.miniGameActionButton.textContent = getMiniGameActionLabel(game);
+  els.miniGameSecondaryButton.classList.toggle("hidden", game.phase !== "complete");
+  updateMiniGameLive();
+}
+
+function renderMiniGameSteps(game) {
+  const steps = getMiniGameSteps(game);
+  const activeIndex = steps.findIndex((step) => step.phases.includes(game.phase));
+  els.miniGameSteps.style.gridTemplateColumns = `repeat(${steps.length}, minmax(0, 1fr))`;
+  els.miniGameSteps.innerHTML = steps.map((step, index) => {
+    const done = activeIndex === -1 ? game.phase === "complete" : index < activeIndex;
+    const active = index === activeIndex || (game.phase === "complete" && index === steps.length - 1);
+    return `<span class="brew-step ${active ? "active" : ""} ${done ? "done" : ""}">${index + 1} ${step.label}</span>`;
+  }).join("");
+}
+
+function getMiniGameBodyMarkup(game, quality) {
+  if (game.phase === "complete") {
+    return `
+      <div class="mini-finish">
+        <div class="finished-cup" aria-hidden="true">${getMenuItem(game.itemId).emoji}</div>
+        <div>
+          <h3>${quality.label} 완성!</h3>
+          <p>${getQualityText(quality)}</p>
+        </div>
+      </div>
+    `;
   }
-  if (distance <= 27) {
-    return {
-      key: "good",
-      label: "Good",
-      revenueMultiplier: 1,
-      tipBonus: 0.04,
-      xpBonus: 3,
-      drinkTimeMultiplier: 1
-    };
+
+  if (game.gaugeKind === "timing" || game.gaugeKind === "milk") {
+    return `
+      <div class="timing-gauge" aria-label="타이밍 게이지">
+        <div class="gauge-zones" aria-hidden="true">
+          <span class="zone red"></span>
+          <span class="zone yellow"></span>
+          <span class="zone green"></span>
+          <span class="zone yellow"></span>
+          <span class="zone red"></span>
+        </div>
+        <span id="miniPointer" class="timing-pointer"></span>
+      </div>
+      <div class="extraction-progress" aria-hidden="true">
+        <span id="miniProgressFill"></span>
+      </div>
+      <p>${game.gaugeKind === "milk" ? "우유 양이 목표 지점에 가까울 때 멈추세요." : "포인터가 초록 영역에 올 때 멈추세요."}</p>
+    `;
+  }
+
+  if (game.gaugeKind === "baking") {
+    return `
+      <div class="bake-gauge" aria-label="굽기 게이지">
+        <span class="bake-zone under">덜 익음</span>
+        <span class="bake-zone ideal">적당함</span>
+        <span class="bake-zone burnt">탐</span>
+        <span id="miniBakePointer" class="bake-pointer"></span>
+      </div>
+      <p>오븐 안의 빵이 적당한 영역에 들어오면 꺼내기를 누르세요.</p>
+    `;
+  }
+
+  if (game.gaugeKind === "toast") {
+    return `
+      <div class="toast-game">
+        <span id="toastPreview" class="toast-preview" aria-hidden="true">🍞</span>
+        <div class="toast-meter" aria-hidden="true"><span id="miniProgressFill"></span></div>
+        <div class="toast-labels"><span>연함</span><span>황금색</span><span>진한색</span></div>
+      </div>
+      <p>토스트가 황금색에 가까워졌을 때 멈추세요.</p>
+    `;
+  }
+
+  if (game.gaugeKind === "pour") {
+    return `
+      <div class="pour-game">
+        <div class="pour-cup" aria-hidden="true"><span id="cupFill"></span><i></i></div>
+        <div class="pour-target" aria-hidden="true"></div>
+      </div>
+      <p>컵의 적정선에 맞게 주스 양을 멈추세요.</p>
+    `;
+  }
+
+  if (game.gaugeKind === "blend") {
+    return `
+      <div class="blend-game">
+        <span class="blend-jar" aria-hidden="true">🍓</span>
+        <div class="blend-meter" aria-hidden="true"><span id="miniProgressFill"></span></div>
+        <div class="toast-labels"><span>짧음</span><span>부드러움</span><span>과함</span></div>
+      </div>
+      <p>블렌딩 시간이 적당할 때 멈추세요.</p>
+    `;
+  }
+
+  return `
+    <div class="mini-step-copy">
+      <div class="bean-drop" aria-hidden="true">${getSetupIcon(game.phase)}</div>
+      <div>
+        <h3>${getMiniGamePhaseLabel(game)}</h3>
+        <p>${getMiniGameStepText(game)}</p>
+      </div>
+    </div>
+  `;
+}
+
+function updateMiniGameLive() {
+  const game = runtime.miniGame;
+  if (!game) return;
+  const progress = isTimedPhase(game.phase)
+    ? clamp((performance.now() - game.phaseStartedAt) / Math.max(1, game.phaseEndsAt - game.phaseStartedAt) * 100, 0, 100)
+    : 0;
+  const pointer = document.getElementById("miniPointer");
+  if (pointer) pointer.style.left = `${game.pointer}%`;
+  const progressFill = document.getElementById("miniProgressFill");
+  if (progressFill) progressFill.style.width = `${game.gaugeKind === "timing" || game.gaugeKind === "milk" ? progress : game.progress}%`;
+  const bakePointer = document.getElementById("miniBakePointer");
+  if (bakePointer) bakePointer.style.left = `${game.progress}%`;
+  const cupFill = document.getElementById("cupFill");
+  if (cupFill) cupFill.style.height = `${game.progress}%`;
+  const toastPreview = document.getElementById("toastPreview");
+  if (toastPreview) toastPreview.style.filter = `sepia(${game.progress / 100}) saturate(${1 + game.progress / 90}) brightness(${1.12 - game.progress / 280})`;
+}
+
+function getMiniGameSteps(game) {
+  const item = getMenuItem(game.itemId);
+  if (item.gameType === "americano") {
+    return [
+      { label: "원두", phases: ["beans"] },
+      { label: "추출", phases: ["extractReady", "extracting"] },
+      { label: "완성", phases: ["complete"] }
+    ];
+  }
+  if (item.gameType === "cafeLatte") {
+    return [
+      { label: "원두", phases: ["beans"] },
+      { label: "추출", phases: ["extractReady", "extracting"] },
+      { label: "우유", phases: ["milkReady", "milk"] },
+      { label: "완성", phases: ["complete"] }
+    ];
+  }
+  if (item.gameType === "croissant") {
+    return [
+      { label: "반죽", phases: ["dough"] },
+      { label: "오븐", phases: ["ovenReady", "baking"] },
+      { label: "완성", phases: ["complete"] }
+    ];
+  }
+  if (item.gameType === "toast") {
+    return [
+      { label: "빵", phases: ["bread"] },
+      { label: "굽기", phases: ["toasting"] },
+      { label: "완성", phases: ["complete"] }
+    ];
+  }
+  if (item.gameType === "orangeJuice") {
+    return [
+      { label: "오렌지", phases: ["orange"] },
+      { label: "추출", phases: ["extractJuice"] },
+      { label: "컵", phases: ["pouring"] },
+      { label: "완성", phases: ["complete"] }
+    ];
+  }
+  return [
+    { label: "딸기", phases: ["strawberry"] },
+    { label: "액체", phases: ["liquid"] },
+    { label: "블렌딩", phases: ["blendReady", "blending"] },
+    { label: "따르기", phases: ["pourReady"] },
+    { label: "완성", phases: ["complete"] }
+  ];
+}
+
+function getMiniGameActionLabel(game) {
+  const labels = {
+    beans: "원두 넣기",
+    extractReady: "추출 시작",
+    extracting: "타이밍 맞추기",
+    milkReady: "우유 넣기",
+    milk: "우유 양 맞추기",
+    dough: "반죽 준비",
+    ovenReady: "오븐에 넣기",
+    baking: "꺼내기",
+    bread: "빵 넣기",
+    toasting: "멈추기",
+    orange: "오렌지 선택",
+    extractJuice: "주스 추출",
+    pouring: "컵 채우기 멈추기",
+    strawberry: "딸기 넣기",
+    liquid: "우유 또는 물 선택",
+    blendReady: "블렌딩 시작",
+    blending: "블렌딩 멈추기",
+    pourReady: "컵에 따르기",
+    complete: "닫기"
+  };
+  return labels[game.phase] || "진행";
+}
+
+function getMiniGamePhaseLabel(game) {
+  const labels = {
+    beans: "원두 준비",
+    extractReady: "추출 준비",
+    extracting: "추출 중",
+    milkReady: "우유 준비",
+    milk: "우유 양 맞추기",
+    dough: "반죽 준비",
+    ovenReady: "오븐 예열",
+    baking: "굽는 중",
+    bread: "빵 넣기",
+    toasting: "굽는 중",
+    orange: "오렌지 선택",
+    extractJuice: "주스 추출",
+    pouring: "컵 채우기",
+    strawberry: "딸기 넣기",
+    liquid: "액체 선택",
+    blendReady: "블렌딩 준비",
+    blending: "블렌딩 중",
+    pourReady: "컵에 따르기",
+    complete: "완성"
+  };
+  return labels[game?.phase] || "제조 중";
+}
+
+function getMiniGameStepText(game, quality) {
+  if (quality) return `${quality.label} 품질로 완성되었습니다. 손님 주문과 맞으면 전달할 수 있습니다.`;
+  const text = {
+    beans: "주문에 맞는 원두를 넣고 추출을 준비합니다.",
+    extractReady: "추출을 시작한 뒤 초록 영역에서 멈추세요.",
+    extracting: "포인터가 초록 영역에 올 때 타이밍을 맞추세요.",
+    milkReady: "라떼에 들어갈 우유를 준비합니다.",
+    milk: "우유 양이 목표 영역에 가까울 때 멈추세요.",
+    dough: "크루아상 반죽을 준비합니다.",
+    ovenReady: "반죽을 오븐에 넣고 굽기 타이밍을 기다립니다.",
+    baking: "덜 익음, 적당함, 탐 영역 중 적당함에서 꺼내세요.",
+    bread: "토스트용 빵을 넣습니다.",
+    toasting: "빵 색이 황금색에 가까워졌을 때 멈추세요.",
+    orange: "신선한 오렌지를 선택합니다.",
+    extractJuice: "오렌지를 착즙하고 컵 채우기를 준비합니다.",
+    pouring: "컵의 적정선에 맞게 주스 양을 멈추세요.",
+    strawberry: "딸기를 블렌더에 넣습니다.",
+    liquid: "부드럽게 만들 우유 또는 물을 선택합니다.",
+    blendReady: "블렌딩 시간을 맞출 준비가 되었습니다.",
+    blending: "너무 짧거나 길지 않게 블렌딩 시간을 맞추세요.",
+    pourReady: "완성된 딸기 주스를 컵에 따릅니다."
+  };
+  return text[game.phase] || "메뉴를 준비하세요.";
+}
+
+function getQualityText(quality) {
+  if (quality.key === "perfect") return "팁 가능성과 만족도, 추가 경험치가 올라갑니다.";
+  if (quality.key === "good") return "기본 판매가와 기본 경험치를 받을 수 있습니다.";
+  return "판매는 가능하지만 추가 팁이나 만족도 보너스는 없습니다.";
+}
+
+function getSetupIcon(phase) {
+  const icons = {
+    beans: "🫘",
+    milkReady: "🥛",
+    dough: "🥐",
+    ovenReady: "🔥",
+    bread: "🍞",
+    orange: "🍊",
+    extractJuice: "🧃",
+    strawberry: "🍓",
+    liquid: "🥛",
+    blendReady: "🍹",
+    pourReady: "🥤"
+  };
+  return icons[phase] || "✨";
+}
+
+function isTimedPhase(phase) {
+  return ["extracting", "milk", "baking", "toasting", "pouring", "blending"].includes(phase);
+}
+
+function getQualityKindForPhase(phase) {
+  if (phase === "extracting") return "coffee";
+  if (phase === "milk") return "milk";
+  if (phase === "baking") return "baking";
+  if (phase === "toasting") return "toast";
+  if (phase === "pouring") return "pour";
+  if (phase === "blending") return "blend";
+  return "coffee";
+}
+
+function calculateQuality(kind, value, target = 50, timedOut = false) {
+  const settings = getQualitySettings(kind);
+  const distance = Math.abs(value - target);
+  if (!timedOut && distance <= settings.perfect) return getQualityDef("perfect");
+  if (distance <= settings.good) return getQualityDef("good");
+  return getQualityDef("okay");
+}
+
+function combineQualities(keys) {
+  if (keys.length > 0 && keys.every((key) => key === "perfect")) return getQualityDef("perfect");
+  if (keys.some((key) => key === "okay")) return getQualityDef("okay");
+  return getQualityDef("good");
+}
+
+function getQualitySettings(kind) {
+  const base = CONFIG.qualityWindows[kind] || CONFIG.qualityWindows.coffee;
+  let perfect = base.perfect;
+  let good = base.good;
+  if (kind === "coffee" || kind === "milk") {
+    perfect += (state.upgrades.coffeeMachine - 1) * 1.4;
+    good += (state.upgrades.coffeeMachine - 1) * 0.4;
+  }
+  if (kind === "baking" || kind === "toast") {
+    perfect += (state.upgrades.oven - 1) * 1.6;
+    good += (state.upgrades.oven - 1) * 0.5;
+  }
+  if (kind === "pour" || kind === "blend") {
+    perfect += (state.upgrades.blender - 1) * 1.6;
+    good += (state.upgrades.blender - 1) * 0.5;
   }
   return {
-    key: "okay",
-    label: "Okay",
-    revenueMultiplier: 0.92,
-    tipBonus: 0,
-    xpBonus: 0,
-    drinkTimeMultiplier: 1.12
+    perfect: clamp(perfect, 6, 22),
+    good: clamp(good, 18, 36)
   };
 }
 
 function getCoffeeMiniGameSettings() {
   const level = Math.max(1, state.upgrades.coffeeMachine);
   const equipmentMultiplier = getOwnedBonus("brewMultiplier", true);
+  const quality = getQualitySettings("coffee");
   return {
-    perfectWindow: clamp(16 + (level - 1) * 2.5, 16, 28),
+    perfectWindow: quality.perfect * 2,
     pointerSpeed: Math.max(CONFIG.coffeePointerMinimumSpeed, CONFIG.coffeePointerBaseSpeed * Math.pow(0.94, level - 1) * equipmentMultiplier),
     duration: Math.max(5200, CONFIG.coffeeMiniGameDuration * Math.pow(0.97, level - 1))
   };
 }
 
-function renderCoffeeMiniGame() {
-  const miniGame = runtime.coffeeMiniGame;
-  if (!miniGame) return;
-  const step = miniGame.step;
-  const quality = miniGame.quality;
-  const isExtracting = step === "extracting";
-  const isComplete = step === "complete";
-
-  els.coffeeConfirm.classList.add("hidden");
-  els.coffeeBeanStep.classList.toggle("hidden", step !== "beans");
-  els.coffeeExtractStep.classList.toggle("hidden", step !== "readyToExtract" && step !== "extracting");
-  els.coffeeFinishStep.classList.toggle("hidden", !isComplete);
-  els.startExtractionButton.classList.toggle("hidden", step !== "readyToExtract");
-  els.stopExtractionButton.classList.toggle("hidden", !isExtracting);
-  els.coffeeStream.classList.toggle("running", isExtracting);
-  els.coffeeStepBeans.classList.toggle("active", step === "beans");
-  els.coffeeStepExtract.classList.toggle("active", step === "readyToExtract" || isExtracting);
-  els.coffeeStepFinish.classList.toggle("active", isComplete);
-  els.coffeeStepBeans.classList.toggle("done", step !== "beans");
-  els.coffeeStepExtract.classList.toggle("done", isComplete);
-  els.coffeeResultBadge.textContent = quality?.label || (isExtracting ? "BREW" : "READY");
-  els.coffeeResultBadge.dataset.quality = quality?.key || "";
-  els.coffeeMiniGameSubtitle.textContent = getCoffeeStepText(step, quality);
-  els.timingPointer.style.left = `${miniGame.pointer}%`;
-  els.extractionProgressFill.style.width = isExtracting ? els.extractionProgressFill.style.width : "0%";
-
-  if (quality) {
-    els.coffeeFinishTitle.textContent = `${quality.label} 커피 완성!`;
-    els.coffeeFinishText.textContent = getCoffeeQualityText(quality);
-  }
+function getMachinePointerSpeed(machine) {
+  if (machine === "coffeeMachine") return getCoffeeMiniGameSettings().pointerSpeed;
+  if (machine === "oven") return Math.max(0.026, 0.038 * Math.pow(0.96, state.upgrades.oven - 1));
+  if (machine === "blender") return Math.max(0.026, 0.04 * Math.pow(0.96, state.upgrades.blender - 1));
+  return CONFIG.coffeePointerBaseSpeed;
 }
 
-function getCoffeeStepText(step, quality) {
-  if (step === "beans") return "원두를 넣어 제조를 시작하세요.";
-  if (step === "readyToExtract") return "추출을 시작한 뒤 초록 영역에서 멈추세요.";
-  if (step === "extracting") return "포인터가 초록 영역에 올 때 타이밍을 맞추세요.";
-  if (step === "complete") return `${quality?.label || "Good"} 품질의 커피가 준비되었습니다.`;
-  return "커피를 준비하세요.";
-}
-
-function getCoffeeQualityText(quality) {
-  if (quality.key === "perfect") return "손님 만족도와 팁 확률이 크게 올라갑니다.";
-  if (quality.key === "good") return "기본 품질로 안정적인 만족도를 제공합니다.";
-  return "주문은 완료되지만 팁 보너스는 없습니다.";
+function getMiniGameDuration(game, phase) {
+  const item = getMenuItem(game.itemId);
+  if (phase === "extracting") return getCoffeeMiniGameSettings().duration + (item.gameType === "cafeLatte" ? 800 : 0);
+  if (phase === "baking") return Math.max(6000, CONFIG.bakingDuration * Math.pow(0.98, state.upgrades.oven - 1));
+  if (phase === "toasting") return Math.max(4400, CONFIG.toastDurationMs * Math.pow(0.98, state.upgrades.oven - 1));
+  if (phase === "pouring") return Math.max(4300, CONFIG.pourDuration * Math.pow(0.98, state.upgrades.blender - 1));
+  if (phase === "blending") return Math.max(5200, CONFIG.blendDuration * Math.pow(0.98, state.upgrades.blender - 1));
+  return item.baseTime;
 }
 
 function cancelCoffeeMiniGame(event) {
   event?.preventDefault?.();
-  const miniGame = runtime.coffeeMiniGame;
-  if (!miniGame) {
+  const game = runtime.miniGame;
+  if (!game) {
     closeModal("coffeeModal");
     return;
   }
-  if (miniGame.step === "extracting") {
+  if (isTimedPhase(game.phase)) {
     els.coffeeConfirm.classList.remove("hidden");
     return;
   }
@@ -945,39 +1699,39 @@ function hideCoffeeCancelConfirm(event) {
 
 function confirmCancelCoffeeMiniGame(event) {
   event.preventDefault();
-  runtime.coffeeMiniGame = null;
-  runtime.isBrewing = false;
-  runtime.brewStart = 0;
-  runtime.brewEnd = 0;
-  els.machineProgressFill.style.width = "0%";
-  els.extractionProgressFill.style.width = "0%";
+  cleanupMiniGame();
   closeModal("coffeeModal");
   updateMachineStatus();
-  showToast("커피 제조를 취소했습니다.");
+  showToast("제조를 취소했습니다.");
 }
 
 function closeCoffeeMiniGame(event) {
   event?.preventDefault?.();
-  const step = runtime.coffeeMiniGame?.step;
-  if (step === "extracting") {
+  const phase = runtime.miniGame?.phase;
+  if (isTimedPhase(phase)) {
     cancelCoffeeMiniGame(event);
     return;
   }
-  if (runtime.coffeeMiniGame) {
-    runtime.coffeeMiniGame = null;
-    runtime.isBrewing = false;
-    runtime.brewStart = 0;
-    runtime.brewEnd = 0;
-    els.machineProgressFill.style.width = "0%";
-    els.extractionProgressFill.style.width = "0%";
-    if (step !== "complete") showToast("커피 제조를 취소했습니다.");
-  }
+  if (runtime.miniGame && phase !== "complete") showToast("제조를 취소했습니다.");
+  cleanupMiniGame();
   closeModal("coffeeModal");
   updateMachineStatus();
 }
 
-function syncReadyDrinkCount() {
+function cleanupMiniGame() {
+  runtime.miniGame = null;
+  runtime.coffeeMiniGame = null;
+  runtime.isBrewing = false;
+  runtime.brewStart = 0;
+  runtime.brewEnd = 0;
+  if (els.machineProgressFill) els.machineProgressFill.style.width = "0%";
+}
+
+function syncReadyItemCount() {
+  runtime.readyItems = sanitizeReadyItems(runtime.readyItems);
+  runtime.readyDrinkQueue = runtime.readyItems.filter((item) => getMenuItem(item.itemId)?.category === "coffee");
   runtime.readyDrinks = runtime.readyDrinkQueue.length;
+  state.readyItems = sanitizeReadyItems(runtime.readyItems);
 }
 
 function handleCustomerClick(event) {
@@ -996,33 +1750,47 @@ function handleCustomerClick(event) {
   if (customer.status === "waitingOrder") {
     customer.status = "ordered";
     customer.orderTakenAt = performance.now();
-    showFloatingText(node, customer.order, 50, 5);
-    showToast(`${customer.order} 주문을 받았습니다.`);
+    customer.patienceEndsAt = customer.orderTakenAt + getCustomerPatience(customer);
+    showFloatingText(node, getOrderShortText(customer.order), 50, 5);
+    showToast(`${getOrderShortText(customer.order)} 주문을 받았습니다.`);
     renderCustomers();
+    renderCurrentOrders();
     renderHud();
     return;
   }
 
   if (customer.status === "ordered") {
-    if (runtime.readyDrinks <= 0) {
-      showToast("완성된 음료가 없습니다. 커피 머신을 눌러 제작하세요.");
+    if (runtime.readyItems.length <= 0) {
+      showToast("완성된 메뉴가 없습니다. 주문에 맞는 장비를 눌러 제작하세요.");
       return;
     }
-    const drink = runtime.readyDrinkQueue.shift() || calculateCoffeeQuality(50, true);
-    syncReadyDrinkCount();
+    const readyIndex = runtime.readyItems.findIndex((item) => item.itemId === customer.order?.itemId);
+    if (readyIndex === -1) {
+      showToast("주문한 메뉴가 아니에요!");
+      return;
+    }
+    const readyItem = runtime.readyItems.splice(readyIndex, 1)[0];
+    syncReadyItemCount();
     customer.status = "served";
-    customer.drinkQuality = drink;
+    customer.servedItem = readyItem;
+    customer.drinkQuality = getQualityDef(readyItem.quality);
     customer.servedAt = performance.now();
-    customer.payAt = customer.servedAt + randomBetween(2800, 4300) * (drink.drinkTimeMultiplier || 1);
-    showFloatingText(node, `${drink.label} 전달`, 50, 0);
-    showToast(`손님에게 ${drink.label} 커피를 전달했습니다.`);
+    const menuItem = getMenuItem(readyItem.itemId);
+    const quality = getQualityDef(readyItem.quality);
+    customer.payAt = customer.servedAt + randomBetween(3600, 5600) * (quality.consumeTimeMultiplier || 1);
+    showFloatingText(node, `${quality.label} 전달`, 50, 0);
+    showToast(`손님에게 ${quality.label} ${menuItem.name}을 전달했습니다.`);
+    SoundManager.play("serve");
     renderCustomers();
+    renderReadyShelf();
+    renderCurrentOrders();
     renderHud();
+    saveGame();
     return;
   }
 
   if (customer.status === "served") {
-    showToast("손님이 음료를 즐기는 중입니다.");
+    showToast("손님이 메뉴를 즐기는 중입니다.");
     return;
   }
 
@@ -1045,6 +1813,13 @@ function updateCustomers(timestamp) {
       changed = true;
     }
 
+    if (customer.status === "ordered" && customer.patienceEndsAt && timestamp >= customer.patienceEndsAt) {
+      customer.status = "leaving";
+      customer.leaveAt = timestamp + 700;
+      showToast(`${getOrderShortText(customer.order)} 손님이 오래 기다려 떠났습니다.`);
+      changed = true;
+    }
+
     if (customer.status === "readyToPay" && timestamp >= customer.paymentAt) {
       completePayment(customer, timestamp);
       changed = true;
@@ -1057,6 +1832,7 @@ function updateCustomers(timestamp) {
 
   if (changed) {
     renderCustomers();
+    renderCurrentOrders();
     renderHud();
   }
 }
@@ -1065,7 +1841,9 @@ function completePayment(customer, timestamp) {
   const reward = calculateReward(customer);
   addCoins(reward.total);
   state.totalSales += 1;
-  addXp((customer.lucky ? 34 : 24) + (customer.drinkQuality?.xpBonus || 0));
+  const menuItem = getMenuItem(customer.servedItem?.itemId || customer.order?.itemId);
+  const quality = getQualityDef(customer.servedItem?.quality || customer.drinkQuality?.key);
+  addXp((menuItem?.xp || 24) + (customer.lucky ? 10 : 0) + (quality.xpBonus || 0));
   customer.status = "leaving";
   customer.leaveAt = timestamp + 650;
   const positions = getTablePositions(state.upgrades.tables);
@@ -1076,6 +1854,7 @@ function completePayment(customer, timestamp) {
     showToast(`팁 ${reward.tip}코인을 받았습니다.`);
   }
   showToast(`💰 ${reward.total}코인을 획득했습니다.`);
+  renderCurrentOrders();
   saveGame();
 }
 
@@ -1086,10 +1865,12 @@ function maybeSpawnCustomer(timestamp) {
 }
 
 function spawnCustomer() {
+  if (getActiveOrderCount() >= getActiveOrderLimit()) return false;
   const openTable = findOpenTableIndex();
   if (openTable === -1) return false;
 
-  const order = pick(GAME_DATA.orders);
+  const item = pick(getUnlockedMenuItems());
+  const order = createCustomerOrder(item);
   const lucky = runtime.luckyNextCustomer || Math.random() < 0.06;
   runtime.luckyNextCustomer = false;
   runtime.customerId += 1;
@@ -1126,22 +1907,22 @@ function getCustomerStatus(customer) {
       aria: "자리를 찾는 손님"
     },
     waitingOrder: {
-      icon: "☕?",
+      icon: getMenuItem(customer.order?.itemId)?.emoji || "🧾",
       label: "주문 대기",
       hint: "손님 선택",
-      aria: `${customer.order} 주문 받기`
+      aria: `${getOrderShortText(customer.order)} 주문 받기`
     },
     ordered: {
       icon: "⏳",
-      label: "음료 대기",
-      hint: "커피 제작",
-      aria: `${customer.order} 전달 대기 손님`
+      label: "메뉴 대기",
+      hint: getMachineShortName(getMenuItem(customer.order?.itemId)?.machine),
+      aria: `${getOrderShortText(customer.order)} 전달 대기 손님`
     },
     served: {
-      icon: "☕😊",
-      label: "마시는 중",
+      icon: `${getMenuItem(customer.servedItem?.itemId || customer.order?.itemId)?.emoji || "🍽"}😊`,
+      label: "즐기는 중",
       hint: "만족",
-      aria: "음료를 마시는 손님"
+      aria: "메뉴를 즐기는 손님"
     },
     readyToPay: {
       icon: "💰",
@@ -1158,6 +1939,254 @@ function getCustomerStatus(customer) {
   };
   return map[customer.status] || map.waitingOrder;
 }
+
+function getMenuItem(itemId) {
+  return MENU_ITEMS[itemId] || null;
+}
+
+function getQualityDef(key) {
+  return QUALITY_DEFS[key] || QUALITY_DEFS.good;
+}
+
+function createCustomerOrder(item) {
+  return {
+    itemId: item.id,
+    category: item.category,
+    quality: null
+  };
+}
+
+function getOrderShortText(order) {
+  const item = getMenuItem(order?.itemId);
+  return item ? `${item.emoji} ${item.name}` : "주문";
+}
+
+function getUnlockedMenuItems() {
+  const ids = sanitizeMenuIds(state.unlockedMenus, getMenuIdsUnlockedByLevel(state.level));
+  const items = ids.map((id) => MENU_ITEMS[id]).filter(Boolean);
+  return items.length > 0 ? items : [MENU_ITEMS.americano];
+}
+
+function getMenuIdsUnlockedByLevel(level) {
+  return Object.values(MENU_ITEMS)
+    .filter((item) => item.unlockLevel <= level)
+    .sort((a, b) => a.unlockLevel - b.unlockLevel)
+    .map((item) => item.id);
+}
+
+function isMenuUnlocked(itemId) {
+  const item = getMenuItem(itemId);
+  return Boolean(item && item.unlockLevel <= state.level && state.unlockedMenus.includes(item.id));
+}
+
+function updateMenuUnlocks(showMessages) {
+  const before = new Set(state.unlockedMenus || []);
+  const unlocked = getMenuIdsUnlockedByLevel(state.level);
+  state.unlockedMenus = sanitizeMenuIds([...before, ...unlocked], unlocked).filter((id) => unlocked.includes(id));
+  if (!showMessages) return;
+  unlocked.forEach((itemId) => {
+    if (before.has(itemId)) return;
+    const item = MENU_ITEMS[itemId];
+    showLevelUpMessage(`🎉 새로운 메뉴!\n${item.emoji} ${item.name}`);
+  });
+  renderHud();
+  renderCurrentOrders();
+  updateMachineStatus();
+}
+
+function showLevelUpMessage(message) {
+  els.levelUpToast.textContent = message;
+  els.levelUpToast.classList.remove("hidden");
+  window.setTimeout(() => {
+    els.levelUpToast.classList.add("hidden");
+  }, 1900);
+}
+
+function isMachineUnlocked(machineKey) {
+  const machine = MACHINE_DATA[machineKey];
+  if (!machine) return false;
+  return state.level >= machine.unlockLevel && state.ownedEquipment.includes(getEquipmentIdForMachine(machineKey));
+}
+
+function getEquipmentIdForMachine(machineKey) {
+  if (machineKey === "coffeeMachine") return "basicMachine";
+  return machineKey;
+}
+
+function findNextCraftableItem(machineKey) {
+  const ordered = runtime.customers
+    .filter((customer) => customer.status === "ordered")
+    .map((customer) => getMenuItem(customer.order?.itemId))
+    .filter((item) => item && item.machine === machineKey && isMenuUnlocked(item.id));
+  if (ordered.length === 0) return null;
+
+  const orderedCounts = countBy(ordered.map((item) => item.id));
+  const readyCounts = countBy(runtime.readyItems.map((item) => item.itemId));
+  return ordered.find((item) => (readyCounts[item.id] || 0) < (orderedCounts[item.id] || 0)) || null;
+}
+
+function getPendingOrderCountForMachine(machineKey) {
+  return runtime.customers.filter((customer) => {
+    if (customer.status !== "ordered") return false;
+    return getMenuItem(customer.order?.itemId)?.machine === machineKey;
+  }).length;
+}
+
+function getActiveOrderCount() {
+  return runtime.customers.filter((customer) => (
+    customer.status === "waitingOrder" ||
+    customer.status === "ordered" ||
+    customer.status === "served" ||
+    customer.status === "readyToPay"
+  )).length;
+}
+
+function getActiveOrderLimit() {
+  return CONFIG.activeOrderLimits.reduce((max, entry) => (
+    state.level >= entry.level ? entry.max : max
+  ), CONFIG.activeOrderLimits[0].max);
+}
+
+function getCustomerPatience(customer) {
+  const item = getMenuItem(customer.order?.itemId);
+  return CONFIG.baseCustomerPatience + (item?.difficulty || 1) * CONFIG.patiencePerDifficulty;
+}
+
+function getMachineShortName(machineKey) {
+  return MACHINE_DATA[machineKey]?.name || "제작";
+}
+
+function getMenuSalePrice(item) {
+  if (!item) return 62;
+  return Math.round(item.price * (1 + getCategoryUpgradePriceBonus(item.category)));
+}
+
+function getCategoryUpgradePriceBonus(category) {
+  if (category === "bread") return (state.upgrades.oven - 1) * 0.05;
+  if (category === "juice") return (state.upgrades.blender - 1) * 0.05;
+  return 0;
+}
+
+function getMachineFloatX(machineKey) {
+  if (machineKey === "oven") return 22;
+  if (machineKey === "blender") return 83;
+  return 11;
+}
+
+function getMachineFloatY(machineKey) {
+  if (machineKey === "oven") return 36;
+  if (machineKey === "blender") return 32;
+  return 24;
+}
+
+function countBy(items) {
+  return items.reduce((map, item) => {
+    map[item] = (map[item] || 0) + 1;
+    return map;
+  }, {});
+}
+
+function hydrateRuntimeReadyItems() {
+  runtime.readyItems = sanitizeReadyItems(state.readyItems);
+  syncReadyItemCount();
+}
+
+function sanitizeMenuIds(value, fallback) {
+  const ids = Array.isArray(value) ? value : fallback;
+  const knownIds = new Set(Object.keys(MENU_ITEMS));
+  return [...new Set(ids.filter((id) => knownIds.has(id)))];
+}
+
+function sanitizeReadyItems(value) {
+  const items = Array.isArray(value) ? value : [];
+  return items
+    .map((item) => ({
+      itemId: item.itemId || (item.category === "coffee" ? "americano" : ""),
+      category: item.category || getMenuItem(item.itemId)?.category || "coffee",
+      quality: getQualityDef(item.quality || item.key)?.key,
+      createdAt: Number(item.createdAt) || Date.now()
+    }))
+    .filter((item) => getMenuItem(item.itemId))
+    .slice(-CONFIG.readyItemLimit);
+}
+
+function migrateReadyDrinks(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((drink) => ({
+    itemId: "americano",
+    category: "coffee",
+    quality: drink.key || drink.quality || "good",
+    createdAt: drink.createdAt || Date.now()
+  }));
+}
+
+function showMachineTutorial(machineKey) {
+  if (state.tutorialSeen[machineKey]) return;
+  if (machineKey === "coffeeMachine") {
+    state.tutorialSeen[machineKey] = true;
+    return;
+  }
+  const messages = {
+    oven: "🥐 오븐이 해금되었습니다! 빵을 넣고 적절한 굽기 타이밍에 버튼을 눌러주세요.",
+    blender: "🍹 블렌더가 해금되었습니다! 주스는 컵 양이나 블렌딩 시간을 맞춰 완성합니다."
+  };
+  if (messages[machineKey]) {
+    showToast(messages[machineKey]);
+    state.tutorialSeen[machineKey] = true;
+    saveGame();
+  }
+}
+
+function hydrateObjectAssets(root = document) {
+  if (typeof Image === "undefined") return;
+  root.querySelectorAll("[data-asset]:not(.asset-checked)").forEach((node) => {
+    const path = node.dataset.asset;
+    node.classList.add("asset-checked");
+    if (!path) return;
+    const image = new Image();
+    image.onload = () => {
+      node.classList.add("asset-loaded");
+      const sprite = node.querySelector(".object-sprite, .showcase-sprite");
+      if (sprite) sprite.style.backgroundImage = `url("${path}")`;
+    };
+    image.onerror = () => {
+      node.classList.add("asset-missing");
+    };
+    image.src = path;
+  });
+}
+
+function getDepthIndex(y, base = 1) {
+  return base + Math.round(y * 2);
+}
+
+const SoundManager = {
+  enabled: false,
+  sounds: {
+    "coffee-brew": "./assets/sounds/coffee-brew.mp3",
+    oven: "./assets/sounds/oven.mp3",
+    toast: "./assets/sounds/toast.mp3",
+    blender: "./assets/sounds/blender.mp3",
+    "juice-pour": "./assets/sounds/juice-pour.mp3",
+    order: "./assets/sounds/order.mp3",
+    serve: "./assets/sounds/serve.mp3",
+    success: "./assets/sounds/success.mp3"
+  },
+  cache: {},
+  play(name) {
+    if (!this.enabled) return;
+    const path = this.sounds[name];
+    if (!path || typeof Audio === "undefined") return;
+    try {
+      const audio = this.cache[name] || new Audio(path);
+      this.cache[name] = audio;
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+    } catch (error) {
+      if (DEBUG_MODE) console.warn("Sound could not play.", name, error);
+    }
+  }
+};
 
 function initializeCats() {
   state.ownedCats.forEach((catId) => createCatActor(catId));
@@ -1220,6 +2249,7 @@ function updateCatMovement(timestamp) {
     actor.y = clamp(actor.y, CONFIG.catBounds.minY, CONFIG.catBounds.maxY);
     node.style.left = `${actor.x}%`;
     node.style.top = `${actor.y}%`;
+    node.style.zIndex = getDepthIndex(actor.y, 9);
     node.className = `cat cat-${actor.mode} facing-${actor.direction}`;
 
     const cat = GAME_DATA.cats[catId];
@@ -1534,6 +2564,8 @@ function buyUpgrade(upgradeId) {
     renderTables();
   }
   if (upgradeId === "coffeeMachine") state.upgrades.coffeeMachine += 1;
+  if (upgradeId === "oven") state.upgrades.oven += 1;
+  if (upgradeId === "blender") state.upgrades.blender += 1;
   if (upgradeId === "interior") state.upgrades.interior += 1;
   if (upgradeId === "visitSpeed") state.upgrades.visitSpeed += 1;
 
@@ -1549,6 +2581,7 @@ function getUpgradeDefinitions() {
       name: "테이블 추가",
       cost: getUpgradeCost("tables"),
       disabled: state.upgrades.tables >= MAX_TABLES,
+      maxed: state.upgrades.tables >= MAX_TABLES,
       description: `현재 ${state.upgrades.tables}개 · 동시에 받을 수 있는 손님 수 증가`
     },
     {
@@ -1557,6 +2590,24 @@ function getUpgradeDefinitions() {
       cost: getUpgradeCost("coffeeMachine"),
       disabled: false,
       description: `Lv.${state.upgrades.coffeeMachine} · Perfect 영역 ${Math.round(getCoffeeMiniGameSettings().perfectWindow)}%`
+    },
+    {
+      id: "oven",
+      name: "오븐 업그레이드",
+      cost: getUpgradeCost("oven"),
+      disabled: state.level < MACHINE_DATA.oven.unlockLevel,
+      locked: state.level < MACHINE_DATA.oven.unlockLevel,
+      unlockLevel: MACHINE_DATA.oven.unlockLevel,
+      description: `Lv.${state.upgrades.oven} · 빵 Perfect 구간 증가 · 빵 가격 +${Math.round(getCategoryUpgradePriceBonus("bread") * 100)}%`
+    },
+    {
+      id: "blender",
+      name: "블렌더 업그레이드",
+      cost: getUpgradeCost("blender"),
+      disabled: state.level < MACHINE_DATA.blender.unlockLevel,
+      locked: state.level < MACHINE_DATA.blender.unlockLevel,
+      unlockLevel: MACHINE_DATA.blender.unlockLevel,
+      description: `Lv.${state.upgrades.blender} · 주스 Perfect 구간 증가 · 주스 가격 +${Math.round(getCategoryUpgradePriceBonus("juice") * 100)}%`
     },
     {
       id: "interior",
@@ -1578,6 +2629,8 @@ function getUpgradeDefinitions() {
 function getUpgradeCost(type) {
   if (type === "tables") return Math.round(260 + (state.upgrades.tables - 2) * 210);
   if (type === "coffeeMachine") return Math.round(360 * Math.pow(state.upgrades.coffeeMachine, 1.38));
+  if (type === "oven") return Math.round(340 * Math.pow(state.upgrades.oven, 1.36));
+  if (type === "blender") return Math.round(360 * Math.pow(state.upgrades.blender, 1.36));
   if (type === "interior") return Math.round(390 * Math.pow(state.upgrades.interior, 1.42));
   if (type === "visitSpeed") return Math.round(320 * Math.pow(state.upgrades.visitSpeed, 1.34));
   return 9999;
@@ -1587,19 +2640,22 @@ function getCustomerInterval() {
   const upgradeMultiplier = Math.pow(0.9, state.upgrades.visitSpeed - 1);
   const catMultiplier = getOwnedBonus("visitSpeedMultiplier", true);
   const influencerMultiplier = performance.now() < runtime.influencerUntil ? 0.55 : 1;
+  const craftingMultiplier = runtime.miniGame ? CONFIG.craftingSpawnSlowdown : 1;
   const baseDelay = randomBetween(CONFIG.customerSpawnMin, CONFIG.customerSpawnMax);
-  return Math.max(CONFIG.minimumSpawnDelay, baseDelay * upgradeMultiplier * catMultiplier * influencerMultiplier);
+  return Math.max(CONFIG.minimumSpawnDelay, baseDelay * upgradeMultiplier * catMultiplier * influencerMultiplier * craftingMultiplier);
 }
 
 function calculateReward(customer) {
-  const base = 62 + (state.level - 1) * 4;
+  const menuItem = getMenuItem(customer.servedItem?.itemId || customer.order?.itemId);
+  const quality = getQualityDef(customer.servedItem?.quality || customer.drinkQuality?.key);
+  const base = getMenuSalePrice(menuItem);
   const interiorBonus = 1 + (state.upgrades.interior - 1) * 0.12;
   const revenueBonus = 1 + getOwnedBonus("revenueBonus", false);
   const satisfactionBonus = 1 + getOwnedBonus("satisfactionBonus", false);
-  const qualityBonus = customer.drinkQuality?.revenueMultiplier || 1;
+  const qualitySatisfaction = 1 + (quality.satisfactionBonus || 0);
   const luckyBonus = customer.lucky ? 1.25 : 1;
-  const amount = Math.round(base * interiorBonus * revenueBonus * satisfactionBonus * luckyBonus * qualityBonus);
-  const tipChance = clamp(0.12 + getOwnedBonus("tipChanceBonus", false) + (customer.drinkQuality?.tipBonus || 0) + (customer.lucky ? 0.62 : 0), 0, 0.92);
+  const amount = Math.round(base * interiorBonus * revenueBonus * satisfactionBonus * qualitySatisfaction * luckyBonus);
+  const tipChance = clamp(0.12 + getOwnedBonus("tipChanceBonus", false) + (quality.tipBonus || 0) + (customer.lucky ? 0.62 : 0), 0, 0.92);
   let tip = 0;
   if (Math.random() < tipChance) {
     const tipRate = customer.lucky ? randomBetween(0.55, 0.95) : randomBetween(0.16, 0.34);
@@ -1637,6 +2693,7 @@ function addXp(amount) {
   if (leveledUp) {
     showLevelUp();
     showToast(`🎉 카페 레벨이 ${state.level}이 되었습니다.`);
+    updateMenuUnlocks(true);
   }
 }
 
@@ -1690,8 +2747,10 @@ function resetGame() {
   runtime.customers = [];
   runtime.readyDrinks = 0;
   runtime.readyDrinkQueue = [];
+  runtime.readyItems = [];
   runtime.isBrewing = false;
   runtime.coffeeMiniGame = null;
+  runtime.miniGame = null;
   runtime.catActors = {};
   runtime.catLastUpdate = 0;
   normalizeState();

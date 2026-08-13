@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Meow Cafe Tycoon</title>
-  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./style.css?v=20260813">
 </head>
 <body>
   <div class="app-shell">
@@ -49,6 +49,16 @@
           <div class="window-shape window-one" aria-hidden="true"></div>
           <div class="window-shape window-two" aria-hidden="true"></div>
           <div class="counter-shape" aria-hidden="true"></div>
+          <div class="kitchen-floor" aria-hidden="true"></div>
+          <div class="cat-corner-rug" aria-hidden="true"></div>
+
+          <section id="orderBoard" class="order-board" aria-label="현재 주문">
+            <div class="order-board-title">
+              <span>주문</span>
+              <span id="missionChip" class="mission-chip">🎯 0/5</span>
+            </div>
+            <div id="orderList" class="order-list">대기 중</div>
+          </section>
 
           <div id="furnitureLayer" class="furniture-layer" aria-hidden="true"></div>
           <div id="tableLayer" class="table-layer" aria-label="테이블"></div>
@@ -56,14 +66,79 @@
           <div id="catLayer" class="cat-layer" aria-label="고양이"></div>
           <div id="floatingLayer" class="floating-layer" aria-hidden="true"></div>
 
-          <button id="coffeeMachine" class="coffee-machine" type="button" aria-label="커피 머신에서 음료 제작">
-            <span class="machine-emoji" aria-hidden="true">☕</span>
+          <button id="coffeeMachine" class="equipment-object coffee-machine" type="button" data-machine-key="coffeeMachine" data-asset="./assets/machines/coffee-machine.webp" aria-label="커피 머신에서 음료 제작">
+            <span class="object-sprite coffee-sprite" data-fallback="☕" aria-hidden="true">
+              <span class="espresso-body css-object-part"></span>
+              <span class="espresso-panel css-object-part"></span>
+              <span class="espresso-gauge espresso-gauge-left css-object-part"></span>
+              <span class="espresso-gauge espresso-gauge-right css-object-part"></span>
+              <span class="espresso-portafilter css-object-part"></span>
+              <span class="espresso-spout css-object-part"></span>
+              <span class="espresso-stream css-object-part"></span>
+              <span class="espresso-tray css-object-part"></span>
+              <span class="espresso-cup css-object-part"></span>
+              <span class="coffee-decor bean-jar css-object-part"></span>
+              <span class="coffee-decor milk-bottle css-object-part"></span>
+              <span class="emoji-fallback">☕</span>
+            </span>
             <span class="machine-title">커피 머신</span>
             <span id="machineStatus" class="machine-status">주문 대기</span>
             <span class="machine-progress" aria-hidden="true">
               <span id="machineProgressFill"></span>
             </span>
           </button>
+
+          <button id="ovenMachine" class="equipment-object oven-machine" type="button" data-machine-key="oven" data-asset="./assets/machines/oven.webp" aria-label="오븐에서 빵 제작">
+            <span class="object-sprite oven-sprite" data-fallback="🥐" aria-hidden="true">
+              <span class="oven-body css-object-part"></span>
+              <span class="oven-door css-object-part"></span>
+              <span class="oven-glass css-object-part"></span>
+              <span class="oven-handle css-object-part"></span>
+              <span class="oven-knob oven-knob-left css-object-part"></span>
+              <span class="oven-knob oven-knob-right css-object-part"></span>
+              <span class="oven-tray css-object-part"></span>
+              <span class="oven-bread oven-bread-one css-object-part"></span>
+              <span class="oven-bread oven-bread-two css-object-part"></span>
+              <span class="emoji-fallback">🥐</span>
+            </span>
+            <span class="machine-title">오븐</span>
+            <span id="ovenStatus" class="machine-status">Lv.2 해금</span>
+            <span class="machine-lock" aria-hidden="true">🔒</span>
+          </button>
+
+          <button id="blenderMachine" class="equipment-object blender-machine" type="button" data-machine-key="blender" data-asset="./assets/machines/blender.webp" aria-label="블렌더에서 주스 제작">
+            <span class="object-sprite blender-sprite" data-fallback="🍹" aria-hidden="true">
+              <span class="blender-lid css-object-part"></span>
+              <span class="blender-jar css-object-part"></span>
+              <span class="blender-juice css-object-part"></span>
+              <span class="blender-blade css-object-part"></span>
+              <span class="blender-neck css-object-part"></span>
+              <span class="blender-base css-object-part"></span>
+              <span class="blender-button blender-button-one css-object-part"></span>
+              <span class="blender-button blender-button-two css-object-part"></span>
+              <span class="juice-decor orange-dot css-object-part"></span>
+              <span class="juice-decor berry-dot css-object-part"></span>
+              <span class="emoji-fallback">🍹</span>
+            </span>
+            <span class="machine-title">블렌더</span>
+            <span id="blenderStatus" class="machine-status">Lv.3 해금</span>
+            <span class="machine-lock" aria-hidden="true">🔒</span>
+          </button>
+
+          <button id="bakeryShowcase" class="bakery-showcase" type="button" data-asset="./assets/furniture/bakery-showcase.webp" aria-label="빵 쇼케이스 보기">
+            <span class="showcase-sprite" aria-hidden="true">
+              <span class="showcase-glass css-object-part"></span>
+              <span class="showcase-base css-object-part"></span>
+              <span class="showcase-shelf css-object-part"></span>
+              <span class="showcase-bread croissant-small css-object-part"></span>
+              <span class="showcase-bread toast-small css-object-part"></span>
+              <span class="showcase-bread bun-small css-object-part"></span>
+              <span class="emoji-fallback">🥐</span>
+            </span>
+            <span class="machine-title">쇼케이스</span>
+          </button>
+
+          <div id="readyShelf" class="ready-shelf" aria-label="완성 음식 보관대"></div>
 
           <button id="cupEventButton" class="cup-event hidden" type="button" aria-label="떨어진 컵 줍기">
             🥤
@@ -83,8 +158,8 @@
             <strong id="tableSummary">2개</strong>
           </div>
           <div>
-            <span>완성 음료</span>
-            <strong id="drinkSummary">0잔</strong>
+            <span>완성 메뉴</span>
+            <strong id="drinkSummary">0개</strong>
           </div>
           <div>
             <span>손님</span>
@@ -184,69 +259,35 @@
     <section class="modal-panel coffee-panel">
       <div class="modal-header">
         <div>
-          <h2 id="coffeeMiniGameTitle">커피 제조</h2>
-          <p id="coffeeMiniGameSubtitle" class="mini-subtitle">원두를 준비하고 추출 타이밍을 맞추세요.</p>
+          <h2 id="coffeeMiniGameTitle">메뉴 제조</h2>
+          <p id="coffeeMiniGameSubtitle" class="mini-subtitle">주문에 맞는 메뉴를 직접 만들어 보세요.</p>
         </div>
-        <button id="coffeeCancelButton" class="icon-button" type="button" aria-label="커피 제조 닫기">✕</button>
+        <button id="coffeeCancelButton" class="icon-button" type="button" aria-label="제조 닫기">✕</button>
       </div>
 
       <div id="coffeeConfirm" class="coffee-confirm hidden" role="status">
-        <span>커피 제조를 취소하시겠습니까?</span>
+        <span>제조를 취소하시겠습니까?</span>
         <div>
           <button id="coffeeKeepButton" class="small-button" type="button">계속</button>
           <button id="coffeeConfirmCancelButton" class="danger-button" type="button">취소</button>
         </div>
       </div>
 
-      <div class="brew-station" aria-hidden="true">
-        <div class="brew-machine">
-          <span class="brew-machine-top"></span>
+      <div id="miniGameVisual" class="brew-station mini-game-visual" aria-hidden="true">
+        <div id="miniGameProp" class="mini-game-prop">
+          <span id="miniGameIcon" class="mini-game-icon">☕</span>
           <span id="coffeeStream" class="coffee-stream"></span>
-          <span class="brew-cup">☕</span>
         </div>
         <div id="coffeeResultBadge" class="coffee-result-badge">READY</div>
       </div>
 
-      <div class="brew-steps" aria-label="커피 제조 단계">
-        <span id="coffeeStepBeans" class="brew-step active">1 원두</span>
-        <span id="coffeeStepExtract" class="brew-step">2 추출</span>
-        <span id="coffeeStepFinish" class="brew-step">3 완성</span>
-      </div>
+      <div id="miniGameSteps" class="brew-steps" aria-label="제조 단계"></div>
 
-      <div id="coffeeBeanStep" class="coffee-step-panel">
-        <div class="bean-drop" aria-hidden="true">🫘</div>
-        <div>
-          <h3>원두 준비</h3>
-          <p>주문에 맞는 원두를 넣고 추출을 준비합니다.</p>
-        </div>
-        <button id="addBeansButton" class="primary-button" type="button">원두 넣기</button>
-      </div>
+      <div id="miniGameBody" class="coffee-step-panel mini-game-body"></div>
 
-      <div id="coffeeExtractStep" class="coffee-step-panel hidden">
-        <div class="timing-gauge" aria-label="추출 타이밍 게이지">
-          <div class="gauge-zones" aria-hidden="true">
-            <span class="zone red"></span>
-            <span class="zone yellow"></span>
-            <span class="zone green"></span>
-            <span class="zone yellow"></span>
-            <span class="zone red"></span>
-          </div>
-          <span id="timingPointer" class="timing-pointer"></span>
-        </div>
-        <div class="extraction-progress" aria-hidden="true">
-          <span id="extractionProgressFill"></span>
-        </div>
-        <button id="startExtractionButton" class="primary-button" type="button">추출 시작</button>
-        <button id="stopExtractionButton" class="secondary-button hidden" type="button">타이밍 맞추기</button>
-      </div>
-
-      <div id="coffeeFinishStep" class="coffee-step-panel hidden">
-        <div class="finished-cup" aria-hidden="true">☕</div>
-        <div>
-          <h3 id="coffeeFinishTitle">커피 완성!</h3>
-          <p id="coffeeFinishText">손님에게 전달할 수 있습니다.</p>
-        </div>
-        <button id="coffeeDoneButton" class="primary-button" type="button">완료</button>
+      <div class="mini-game-actions">
+        <button id="miniGameActionButton" class="primary-button" type="button">시작</button>
+        <button id="miniGameSecondaryButton" class="secondary-button hidden" type="button">완료</button>
       </div>
     </section>
   </div>
@@ -254,6 +295,6 @@
   <div id="levelUpToast" class="level-up hidden" role="status" aria-live="polite"></div>
   <div id="toastRoot" class="toast-root" aria-live="polite"></div>
 
-  <script src="./script.js"></script>
+  <script src="./script.js?v=20260813"></script>
 </body>
 </html>

@@ -26,6 +26,12 @@ function Get-SafeFilePath {
 
   $pathOnly = $RequestPath.Split("?")[0]
   $decodedPath = [System.Uri]::UnescapeDataString($pathOnly)
+  if ($decodedPath -eq "/meow-cafe-tycoon" -or $decodedPath -eq "/meow-cafe-tycoon/") {
+    $decodedPath = "/index.html"
+  }
+  elseif ($decodedPath.StartsWith("/meow-cafe-tycoon/", [System.StringComparison]::OrdinalIgnoreCase)) {
+    $decodedPath = $decodedPath.Substring("/meow-cafe-tycoon".Length)
+  }
   if ($decodedPath -eq "/" -or [string]::IsNullOrWhiteSpace($decodedPath)) {
     $decodedPath = "/index.html"
   }
