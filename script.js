@@ -18,11 +18,6 @@ const CONFIG = {
   readyItemLimit: MAX_READY_ITEMS,
   baseCustomerPatience: 88000,
   patiencePerDifficulty: 9000,
-  activeOrderLimits: [
-    { level: 1, max: 2 },
-    { level: 4, max: 3 },
-    { level: 7, max: 4 }
-  ],
   catWalkSpeedMin: 0.0048,
   catWalkSpeedMax: 0.0074,
   catMoveDistanceMin: 8,
@@ -47,13 +42,43 @@ const CONFIG = {
   toastDurationMs: 5400,
   pourDuration: 5200,
   blendDuration: 6200,
-  qualityWindows: {
-    coffee: { perfect: 10, good: 28 },
-    milk: { perfect: 9, good: 24 },
-    baking: { perfect: 10, good: 26 },
-    toast: { perfect: 11, good: 27 },
-    pour: { perfect: 8, good: 23 },
-    blend: { perfect: 9, good: 24 }
+  miniGameInputCooldownMs: 260
+};
+
+const QUALITY_CONFIG = {
+  coffee: {
+    mode: "timing",
+    perfect: 10,
+    good: 28,
+    requiredElapsedMs: 650,
+    timedOutQuality: "okay"
+  },
+  milk: {
+    mode: "timing",
+    perfect: 9,
+    good: 24,
+    requiredElapsedMs: 550,
+    timedOutQuality: "okay"
+  },
+  orangeJuice: {
+    mode: "progress",
+    rawBelow: 40,
+    goodFrom: 70,
+    perfectFrom: 90
+  },
+  strawberryJuice: {
+    mode: "progress",
+    rawBelow: 40,
+    goodFrom: 70,
+    perfectFrom: 90
+  },
+  bread: {
+    mode: "baking",
+    rawBelow: 40,
+    goodFrom: 70,
+    perfectFrom: 78,
+    perfectTo: 88,
+    overcookedFrom: 91
   }
 };
 
@@ -81,6 +106,22 @@ const QUALITY_DEFS = {
     xpBonus: 0,
     satisfactionBonus: 0,
     consumeTimeMultiplier: 1.1
+  },
+  raw: {
+    key: "raw",
+    label: "Raw",
+    tipBonus: -0.1,
+    xpBonus: -8,
+    satisfactionBonus: -0.45,
+    consumeTimeMultiplier: 1.35
+  },
+  overcooked: {
+    key: "overcooked",
+    label: "Overcooked",
+    tipBonus: -0.06,
+    xpBonus: -4,
+    satisfactionBonus: -0.22,
+    consumeTimeMultiplier: 1.24
   }
 };
 
@@ -617,7 +658,7 @@ function saveGame() {
       ...state,
       saveVersion: SAVE_VERSION,
       readyItems: sanitizeReadyItems(runtime.readyItems),
-      tableCount: state.upgrades.tables,
+      tableCount: getSeatCount(),
       coffeeMachineLevel: state.upgrades.coffeeMachine,
       ovenLevel: state.upgrades.oven,
       blenderLevel: state.upgrades.blender,
@@ -646,7 +687,7 @@ function normalizeState() {
   state.level = sanitizeInteger(state.level, DEFAULT_STATE.level, 1);
   state.xp = sanitizeInteger(state.xp, DEFAULT_STATE.xp, 0);
   state.totalSales = sanitizeInteger(state.totalSales, DEFAULT_STATE.totalSales, 0);
-  state.upgrades.tables = clamp(Math.floor(Number(state.upgrades.tables) || 2), 2, MAX_TABLES);
+  state.upgrades.tables = normalizeSeatCount(state.upgrades.tables);
   state.upgrades.coffeeMachine = Math.max(1, Math.floor(Number(state.upgrades.coffeeMachine) || 1));
   state.upgrades.oven = Math.max(1, Math.floor(Number(state.upgrades.oven) || 1));
   state.upgrades.blender = Math.max(1, Math.floor(Number(state.upgrades.blender) || 1));
@@ -689,7 +730,7 @@ function renderHud() {
   els.levelLabel.textContent = `Lv. ${state.level}`;
   els.xpLabel.textContent = `${state.xp} / ${xpToNext} XP`;
   els.xpFill.style.width = `${xpPercent}%`;
-  els.tableSummary.textContent = `${state.upgrades.tables}개`;
+  els.tableSummary.textContent = `${getSeatCount()}개`;
   els.drinkSummary.textContent = `${runtime.readyItems.length}개`;
   els.customerSummary.textContent = `${runtime.customers.filter((customer) => customer.status !== "leaving").length}명`;
   els.salesSummary.textContent = `${state.totalSales}회`;
@@ -731,7 +772,7 @@ function updateTimedHud(timestamp) {
 }
 
 function renderTables() {
-  const positions = getTablePositions(state.upgrades.tables);
+  const positions = getTablePositions(getSeatCount());
   els.tableLayer.innerHTML = positions.map((position, index) => (
     `<div class="table" style="left:${position.x}%; top:${position.y}%; z-index:${getDepthIndex(position.y, 3)};" aria-label="테이블 ${index + 1}">
       <span class="chair chair-back" aria-hidden="true"></span>
@@ -758,7 +799,7 @@ function renderFurniture() {
 }
 
 function renderCustomers() {
-  const positions = getTablePositions(state.upgrades.tables);
+  const positions = getTablePositions(getSeatCount());
   els.customerLayer.innerHTML = runtime.customers.map((customer) => {
     const tablePosition = positions[customer.tableIndex] || { x: 50, y: 70 };
     const isSeating = customer.status === "seating";
@@ -1069,6 +1110,8 @@ const MiniGameManager = {
       scores: [],
       quality: null,
       lastUpdate: 0,
+      inputLockedUntil: 0,
+      phaseReadyAt: 0,
       finished: false
     };
     runtime.miniGame = game;
@@ -1126,6 +1169,7 @@ const MiniGameManager = {
     event?.preventDefault?.();
     const game = runtime.miniGame;
     if (!game) return;
+    if (lockMiniGameInput(game)) return;
     if (game.finished || game.phase === "complete") {
       closeCoffeeMiniGame(event);
       return;
@@ -1141,7 +1185,7 @@ const MiniGameManager = {
       return;
     }
     if (game.phase === "extracting") {
-      completeActivePhase(false);
+      tryCompleteActivePhase();
       return;
     }
     if (game.phase === "milkReady") {
@@ -1149,7 +1193,7 @@ const MiniGameManager = {
       return;
     }
     if (game.phase === "milk") {
-      completeActivePhase(false);
+      tryCompleteActivePhase();
       return;
     }
     if (game.phase === "dough") {
@@ -1161,7 +1205,7 @@ const MiniGameManager = {
       return;
     }
     if (game.phase === "baking") {
-      completeActivePhase(false);
+      tryCompleteActivePhase();
       return;
     }
     if (game.phase === "bread") {
@@ -1169,7 +1213,7 @@ const MiniGameManager = {
       return;
     }
     if (game.phase === "toasting") {
-      completeActivePhase(false);
+      tryCompleteActivePhase();
       return;
     }
     if (game.phase === "orange") {
@@ -1181,7 +1225,7 @@ const MiniGameManager = {
       return;
     }
     if (game.phase === "pouring") {
-      completeActivePhase(false);
+      tryCompleteActivePhase();
       return;
     }
     if (game.phase === "strawberry") {
@@ -1197,7 +1241,7 @@ const MiniGameManager = {
       return;
     }
     if (game.phase === "blending") {
-      completeActivePhase(false);
+      tryCompleteActivePhase();
       return;
     }
     if (game.phase === "pourReady") {
@@ -1231,20 +1275,23 @@ function setMiniGamePhase(game, phase) {
   game.lastUpdate = 0;
   game.phaseStartedAt = 0;
   game.phaseEndsAt = 0;
+  game.phaseReadyAt = 0;
   renderMiniGame();
   updateMachineStatus();
 }
 
 function beginTimingPhase(game, phase, target, duration, gaugeKind) {
   const now = performance.now();
+  const startsLeft = Math.random() < 0.5;
   game.phase = phase;
   game.target = target;
-  game.pointer = 50;
-  game.direction = Math.random() < 0.5 ? -1 : 1;
+  game.pointer = startsLeft ? 0 : 100;
+  game.direction = startsLeft ? 1 : -1;
   game.speed = getMachinePointerSpeed(game.machine);
   game.gaugeKind = gaugeKind;
   game.phaseStartedAt = now;
   game.phaseEndsAt = now + duration;
+  game.phaseReadyAt = now + getRequiredElapsedForPhase(game, phase);
   game.lastUpdate = now;
   runtime.brewStart = now;
   runtime.brewEnd = game.phaseEndsAt;
@@ -1260,6 +1307,7 @@ function beginProgressPhase(game, phase, target, duration, gaugeKind) {
   game.gaugeKind = gaugeKind;
   game.phaseStartedAt = now;
   game.phaseEndsAt = now + duration;
+  game.phaseReadyAt = now;
   game.lastUpdate = now;
   runtime.brewStart = now;
   runtime.brewEnd = game.phaseEndsAt;
@@ -1267,11 +1315,58 @@ function beginProgressPhase(game, phase, target, duration, gaugeKind) {
   updateMachineStatus();
 }
 
+function lockMiniGameInput(game, duration = CONFIG.miniGameInputCooldownMs) {
+  const now = performance.now();
+  if (game.inputLockedUntil && now < game.inputLockedUntil) return true;
+  game.inputLockedUntil = now + duration;
+  return false;
+}
+
+function tryCompleteActivePhase() {
+  const game = runtime.miniGame;
+  if (!canCompleteActivePhase(game, true)) return false;
+  completeActivePhase(false);
+  return true;
+}
+
+function canCompleteActivePhase(game, notify = false) {
+  if (!game || !isTimedPhase(game.phase)) return false;
+  const now = performance.now();
+  if (game.phaseReadyAt && now < game.phaseReadyAt) {
+    if (notify) showToast("조금 더 진행한 뒤 멈추세요.");
+    return false;
+  }
+
+  const minimumProgress = getMinimumProgressForPhase(game);
+  if (minimumProgress > 0 && game.progress < minimumProgress) {
+    if (notify) showToast("아직 조리가 끝나지 않았어요!");
+    return false;
+  }
+  return true;
+}
+
+function getRequiredElapsedForPhase(game, phase) {
+  const qualityKind = getQualityKindForPhase(phase, game);
+  const config = QUALITY_CONFIG[qualityKind] || QUALITY_CONFIG.coffee;
+  return config.requiredElapsedMs || 0;
+}
+
+function getMinimumProgressForPhase(game) {
+  const qualityKind = getQualityKindForPhase(game.phase, game);
+  const config = QUALITY_CONFIG[qualityKind];
+  if (!config || config.mode === "timing") return 0;
+  return config.rawBelow || 0;
+}
+
 function completeActivePhase(timedOut) {
   const game = runtime.miniGame;
   if (!game || !isTimedPhase(game.phase)) return;
   const value = game.gaugeKind === "timing" || game.gaugeKind === "milk" ? game.pointer : game.progress;
-  const quality = calculateQuality(getQualityKindForPhase(game.phase), value, game.target, timedOut);
+  const quality = calculateQuality(getQualityKindForPhase(game.phase, game), value, {
+    target: game.target,
+    timedOut,
+    elapsedMs: performance.now() - game.phaseStartedAt
+  });
   game.scores.push(quality.key);
 
   if (game.phase === "extracting" && game.gameType === "cafeLatte") {
@@ -1290,6 +1385,10 @@ function finishMiniGame(game, quality) {
   if (!game || game.finished) return;
   const item = getMenuItem(game.itemId);
   if (!item) return;
+  if (quality?.key === "raw") {
+    showToast("아직 조리가 끝나지 않았어요!");
+    return;
+  }
   game.finished = true;
   game.phase = "complete";
   game.quality = quality;
@@ -1335,7 +1434,27 @@ function renderMiniGame() {
   els.miniGameBody.innerHTML = getMiniGameBodyMarkup(game, quality);
   els.miniGameActionButton.textContent = getMiniGameActionLabel(game);
   els.miniGameSecondaryButton.classList.toggle("hidden", game.phase !== "complete");
+  updateMiniGameActionState(game);
   updateMiniGameLive();
+}
+
+function updateMiniGameActionState(game) {
+  if (!els.miniGameActionButton || !game) return;
+  const disabledReason = getMiniGameActionDisabledReason(game);
+  const disabled = Boolean(disabledReason);
+  els.miniGameActionButton.disabled = disabled;
+  els.miniGameActionButton.classList.toggle("is-disabled", disabled);
+  els.miniGameActionButton.title = disabledReason;
+  els.miniGameActionButton.setAttribute("aria-disabled", disabled ? "true" : "false");
+}
+
+function getMiniGameActionDisabledReason(game) {
+  if (!game || game.finished || game.phase === "complete" || !isTimedPhase(game.phase)) return "";
+  const now = performance.now();
+  if (game.phaseReadyAt && now < game.phaseReadyAt) return "아직 준비 중";
+  const minimumProgress = getMinimumProgressForPhase(game);
+  if (minimumProgress > 0 && game.progress < minimumProgress) return "아직 조리가 끝나지 않았어요";
+  return "";
 }
 
 function renderMiniGameSteps(game) {
@@ -1377,6 +1496,7 @@ function getMiniGameBodyMarkup(game, quality) {
       <div class="extraction-progress" aria-hidden="true">
         <span id="miniProgressFill"></span>
       </div>
+      <div id="miniProgressText" class="mini-progress-readout">${getProgressReadoutLabel(game)} 0%</div>
       <p>${game.gaugeKind === "milk" ? "우유 양이 목표 지점에 가까울 때 멈추세요." : "포인터가 초록 영역에 올 때 멈추세요."}</p>
     `;
   }
@@ -1389,6 +1509,7 @@ function getMiniGameBodyMarkup(game, quality) {
         <span class="bake-zone burnt">탐</span>
         <span id="miniBakePointer" class="bake-pointer"></span>
       </div>
+      <div id="miniProgressText" class="mini-progress-readout">${getProgressReadoutLabel(game)} 0%</div>
       <p>오븐 안의 빵이 적당한 영역에 들어오면 꺼내기를 누르세요.</p>
     `;
   }
@@ -1399,6 +1520,7 @@ function getMiniGameBodyMarkup(game, quality) {
         <span id="toastPreview" class="toast-preview" aria-hidden="true">🍞</span>
         <div class="toast-meter" aria-hidden="true"><span id="miniProgressFill"></span></div>
         <div class="toast-labels"><span>연함</span><span>황금색</span><span>진한색</span></div>
+        <div id="miniProgressText" class="mini-progress-readout">${getProgressReadoutLabel(game)} 0%</div>
       </div>
       <p>토스트가 황금색에 가까워졌을 때 멈추세요.</p>
     `;
@@ -1410,6 +1532,7 @@ function getMiniGameBodyMarkup(game, quality) {
         <div class="pour-cup" aria-hidden="true"><span id="cupFill"></span><i></i></div>
         <div class="pour-target" aria-hidden="true"></div>
       </div>
+      <div id="miniProgressText" class="mini-progress-readout">${getProgressReadoutLabel(game)} 0%</div>
       <p>컵의 적정선에 맞게 주스 양을 멈추세요.</p>
     `;
   }
@@ -1420,6 +1543,7 @@ function getMiniGameBodyMarkup(game, quality) {
         <span class="blend-jar" aria-hidden="true">🍓</span>
         <div class="blend-meter" aria-hidden="true"><span id="miniProgressFill"></span></div>
         <div class="toast-labels"><span>짧음</span><span>부드러움</span><span>과함</span></div>
+        <div id="miniProgressText" class="mini-progress-readout">${getProgressReadoutLabel(game)} 0%</div>
       </div>
       <p>블렌딩 시간이 적당할 때 멈추세요.</p>
     `;
@@ -1442,16 +1566,49 @@ function updateMiniGameLive() {
   const progress = isTimedPhase(game.phase)
     ? clamp((performance.now() - game.phaseStartedAt) / Math.max(1, game.phaseEndsAt - game.phaseStartedAt) * 100, 0, 100)
     : 0;
+  const displayProgress = game.gaugeKind === "timing" || game.gaugeKind === "milk" ? progress : game.progress;
   const pointer = document.getElementById("miniPointer");
   if (pointer) pointer.style.left = `${game.pointer}%`;
   const progressFill = document.getElementById("miniProgressFill");
-  if (progressFill) progressFill.style.width = `${game.gaugeKind === "timing" || game.gaugeKind === "milk" ? progress : game.progress}%`;
+  if (progressFill) progressFill.style.width = `${displayProgress}%`;
   const bakePointer = document.getElementById("miniBakePointer");
   if (bakePointer) bakePointer.style.left = `${game.progress}%`;
   const cupFill = document.getElementById("cupFill");
   if (cupFill) cupFill.style.height = `${game.progress}%`;
   const toastPreview = document.getElementById("toastPreview");
-  if (toastPreview) toastPreview.style.filter = `sepia(${game.progress / 100}) saturate(${1 + game.progress / 90}) brightness(${1.12 - game.progress / 280})`;
+  if (toastPreview) toastPreview.style.filter = getBreadPreviewFilter(game.progress);
+  if ((game.gaugeKind === "baking" || game.gaugeKind === "toast") && els.miniGameIcon) {
+    els.miniGameIcon.style.filter = getBreadPreviewFilter(game.progress);
+  } else if (els.miniGameIcon) {
+    els.miniGameIcon.style.filter = "";
+  }
+  const progressText = document.getElementById("miniProgressText");
+  if (progressText) progressText.textContent = `${getProgressReadoutLabel(game)} ${Math.round(displayProgress)}%`;
+  updateMiniGameActionState(game);
+}
+
+function getProgressReadoutLabel(game) {
+  if (game.phase === "extracting") return "추출 진행도";
+  if (game.phase === "milk") return "우유 진행도";
+  if (game.phase === "baking" || game.phase === "toasting") return "굽기 진행도";
+  if (game.phase === "pouring") return "주스 추출";
+  if (game.phase === "blending") return "으깨기 진행도";
+  return "진행도";
+}
+
+function getBreadPreviewFilter(progress) {
+  const value = clamp(Number(progress) || 0, 0, 100);
+  const sepia = 0.15 + value / 95;
+  const saturate = 0.9 + value / 55;
+  const brightness = value < 40
+    ? 1.18
+    : value < 70
+      ? 1.08
+      : value < 91
+        ? 0.98
+        : 0.64;
+  const contrast = value >= 91 ? 1.45 : 1 + value / 260;
+  return `sepia(${sepia}) saturate(${saturate}) brightness(${brightness}) contrast(${contrast})`;
 }
 
 function getMiniGameSteps(game) {
@@ -1513,14 +1670,14 @@ function getMiniGameActionLabel(game) {
     ovenReady: "오븐에 넣기",
     baking: "꺼내기",
     bread: "빵 넣기",
-    toasting: "멈추기",
+    toasting: "꺼내기",
     orange: "오렌지 선택",
-    extractJuice: "주스 추출",
-    pouring: "컵 채우기 멈추기",
+    extractJuice: "짜기 시작",
+    pouring: "짜기 완료",
     strawberry: "딸기 넣기",
     liquid: "우유 또는 물 선택",
-    blendReady: "블렌딩 시작",
-    blending: "블렌딩 멈추기",
+    blendReady: "으깨기 시작",
+    blending: "으깨기 완료",
     pourReady: "컵에 따르기",
     complete: "닫기"
   };
@@ -1580,6 +1737,8 @@ function getMiniGameStepText(game, quality) {
 function getQualityText(quality) {
   if (quality.key === "perfect") return "팁 가능성과 만족도, 추가 경험치가 올라갑니다.";
   if (quality.key === "good") return "기본 판매가와 기본 경험치를 받을 수 있습니다.";
+  if (quality.key === "raw") return "아직 조리가 끝나지 않아 손님에게 전달할 수 없습니다.";
+  if (quality.key === "overcooked") return "너무 오래 조리되어 만족도와 보상이 낮아집니다.";
   return "판매는 가능하지만 추가 팁이나 만족도 보너스는 없습니다.";
 }
 
@@ -1604,50 +1763,86 @@ function isTimedPhase(phase) {
   return ["extracting", "milk", "baking", "toasting", "pouring", "blending"].includes(phase);
 }
 
-function getQualityKindForPhase(phase) {
+function getQualityKindForPhase(phase, game = runtime.miniGame) {
   if (phase === "extracting") return "coffee";
   if (phase === "milk") return "milk";
-  if (phase === "baking") return "baking";
-  if (phase === "toasting") return "toast";
-  if (phase === "pouring") return "pour";
-  if (phase === "blending") return "blend";
+  if (phase === "baking" || phase === "toasting") return "bread";
+  if (phase === "pouring") return "orangeJuice";
+  if (phase === "blending") return game?.gameType === "strawberryJuice" ? "strawberryJuice" : "orangeJuice";
   return "coffee";
 }
 
-function calculateQuality(kind, value, target = 50, timedOut = false) {
-  const settings = getQualitySettings(kind);
-  const distance = Math.abs(value - target);
-  if (!timedOut && distance <= settings.perfect) return getQualityDef("perfect");
-  if (distance <= settings.good) return getQualityDef("good");
+function calculateQuality(itemType, progress, timing = {}) {
+  const config = getAdjustedQualityConfig(itemType);
+  if (config.mode === "timing") {
+    const elapsedMs = Number(timing.elapsedMs) || 0;
+    if (elapsedMs < (config.requiredElapsedMs || 0)) return getQualityDef("raw");
+    if (timing.timedOut) return getQualityDef(config.timedOutQuality || "okay");
+    const target = Number(timing.target ?? 50);
+    const distance = Math.abs(progress - target);
+    if (distance <= config.perfect) return getQualityDef("perfect");
+    if (distance <= config.good) return getQualityDef("good");
+    return getQualityDef("okay");
+  }
+
+  const value = clamp(Number(progress) || 0, 0, 100);
+  if (value < (config.rawBelow || 0)) return getQualityDef("raw");
+
+  if (config.mode === "baking") {
+    if (value >= config.overcookedFrom) return getQualityDef("overcooked");
+    if (value >= config.perfectFrom && value <= config.perfectTo) return getQualityDef("perfect");
+    if (value >= config.goodFrom) return getQualityDef("good");
+    return getQualityDef("okay");
+  }
+
+  if (value >= config.perfectFrom) return getQualityDef("perfect");
+  if (value >= config.goodFrom) return getQualityDef("good");
   return getQualityDef("okay");
 }
 
 function combineQualities(keys) {
+  if (!Array.isArray(keys) || keys.length === 0) return getQualityDef("okay");
   if (keys.length > 0 && keys.every((key) => key === "perfect")) return getQualityDef("perfect");
+  if (keys.some((key) => key === "raw")) return getQualityDef("raw");
+  if (keys.some((key) => key === "overcooked")) return getQualityDef("overcooked");
   if (keys.some((key) => key === "okay")) return getQualityDef("okay");
   return getQualityDef("good");
 }
 
 function getQualitySettings(kind) {
-  const base = CONFIG.qualityWindows[kind] || CONFIG.qualityWindows.coffee;
-  let perfect = base.perfect;
-  let good = base.good;
+  const base = QUALITY_CONFIG[kind] || QUALITY_CONFIG.coffee;
+  let perfect = base.perfect || QUALITY_CONFIG.coffee.perfect;
+  let good = base.good || QUALITY_CONFIG.coffee.good;
   if (kind === "coffee" || kind === "milk") {
     perfect += (state.upgrades.coffeeMachine - 1) * 1.4;
     good += (state.upgrades.coffeeMachine - 1) * 0.4;
-  }
-  if (kind === "baking" || kind === "toast") {
-    perfect += (state.upgrades.oven - 1) * 1.6;
-    good += (state.upgrades.oven - 1) * 0.5;
-  }
-  if (kind === "pour" || kind === "blend") {
-    perfect += (state.upgrades.blender - 1) * 1.6;
-    good += (state.upgrades.blender - 1) * 0.5;
   }
   return {
     perfect: clamp(perfect, 6, 22),
     good: clamp(good, 18, 36)
   };
+}
+
+function getAdjustedQualityConfig(itemType) {
+  const base = QUALITY_CONFIG[itemType] || QUALITY_CONFIG.coffee;
+  const config = { ...base };
+  if (config.mode === "timing") {
+    const timing = getQualitySettings(itemType);
+    config.perfect = timing.perfect;
+    config.good = timing.good;
+  }
+  if (itemType === "orangeJuice" || itemType === "strawberryJuice") {
+    const bonus = Math.min(7, (state.upgrades.blender - 1) * 1.2);
+    config.goodFrom = clamp(base.goodFrom - bonus, base.rawBelow + 12, base.goodFrom);
+    config.perfectFrom = clamp(base.perfectFrom - bonus * 0.7, config.goodFrom + 12, base.perfectFrom);
+  }
+  if (itemType === "bread") {
+    const bonus = Math.min(7, (state.upgrades.oven - 1) * 1.2);
+    config.goodFrom = clamp(base.goodFrom - bonus, base.rawBelow + 12, base.goodFrom);
+    config.perfectFrom = clamp(base.perfectFrom - bonus * 0.65, config.goodFrom + 4, base.perfectFrom);
+    config.perfectTo = clamp(base.perfectTo + bonus * 0.35, config.perfectFrom + 4, base.overcookedFrom - 1);
+  }
+  return config;
 }
 
 function getCoffeeMiniGameSettings() {
@@ -1769,7 +1964,12 @@ function handleCustomerClick(event) {
       showToast("주문한 메뉴가 아니에요!");
       return;
     }
-    const readyItem = runtime.readyItems.splice(readyIndex, 1)[0];
+    const readyItem = runtime.readyItems[readyIndex];
+    if (getQualityDef(readyItem.quality).key === "raw") {
+      showToast("아직 조리가 끝나지 않았어요!");
+      return;
+    }
+    runtime.readyItems.splice(readyIndex, 1);
     syncReadyItemCount();
     customer.status = "served";
     customer.servedItem = readyItem;
@@ -1846,7 +2046,7 @@ function completePayment(customer, timestamp) {
   addXp((menuItem?.xp || 24) + (customer.lucky ? 10 : 0) + (quality.xpBonus || 0));
   customer.status = "leaving";
   customer.leaveAt = timestamp + 650;
-  const positions = getTablePositions(state.upgrades.tables);
+  const positions = getTablePositions(getSeatCount());
   const tablePosition = positions[customer.tableIndex] || { x: 50, y: 70 };
   showFloatingText(els.cafeStage, `+${reward.amount}코인`, tablePosition.x, tablePosition.y - 22);
   if (reward.tip > 0) {
@@ -1865,6 +2065,7 @@ function maybeSpawnCustomer(timestamp) {
 }
 
 function spawnCustomer() {
+  if (getOccupiedSeatCount() >= getSeatCount()) return false;
   if (getActiveOrderCount() >= getActiveOrderLimit()) return false;
   const openTable = findOpenTableIndex();
   if (openTable === -1) return false;
@@ -1891,11 +2092,19 @@ function spawnCustomer() {
 }
 
 function findOpenTableIndex() {
-  for (let index = 0; index < state.upgrades.tables; index += 1) {
+  for (let index = 0; index < getSeatCount(); index += 1) {
     const occupied = runtime.customers.some((customer) => customer.tableIndex === index && customer.status !== "leaving");
     if (!occupied) return index;
   }
   return -1;
+}
+
+function getSeatCount() {
+  return normalizeSeatCount(state.upgrades.tables);
+}
+
+function getOccupiedSeatCount() {
+  return runtime.customers.filter((customer) => customer.status !== "leaving").length;
 }
 
 function getCustomerStatus(customer) {
@@ -2042,9 +2251,7 @@ function getActiveOrderCount() {
 }
 
 function getActiveOrderLimit() {
-  return CONFIG.activeOrderLimits.reduce((max, entry) => (
-    state.level >= entry.level ? entry.max : max
-  ), CONFIG.activeOrderLimits[0].max);
+  return getSeatCount();
 }
 
 function getCustomerPatience(customer) {
@@ -2363,7 +2570,7 @@ function isCatPositionAllowed(x, y, catId) {
   ));
   if (blocked) return false;
 
-  const tooCloseToTable = getTablePositions(state.upgrades.tables).some((position) => (
+  const tooCloseToTable = getTablePositions(getSeatCount()).some((position) => (
     Math.abs(x - position.x) < 8 && Math.abs(y - position.y) < 6
   ));
   if (tooCloseToTable) return false;
@@ -2560,7 +2767,7 @@ function buyUpgrade(upgradeId) {
     return;
   }
   if (upgradeId === "tables") {
-    state.upgrades.tables = clamp(state.upgrades.tables + 1, 2, MAX_TABLES);
+    state.upgrades.tables = normalizeSeatCount(state.upgrades.tables + 1);
     renderTables();
   }
   if (upgradeId === "coffeeMachine") state.upgrades.coffeeMachine += 1;
@@ -2580,9 +2787,9 @@ function getUpgradeDefinitions() {
       id: "tables",
       name: "테이블 추가",
       cost: getUpgradeCost("tables"),
-      disabled: state.upgrades.tables >= MAX_TABLES,
-      maxed: state.upgrades.tables >= MAX_TABLES,
-      description: `현재 ${state.upgrades.tables}개 · 동시에 받을 수 있는 손님 수 증가`
+      disabled: getSeatCount() >= MAX_TABLES,
+      maxed: getSeatCount() >= MAX_TABLES,
+      description: `현재 ${getSeatCount()}개 · 동시에 받을 수 있는 손님 수 증가`
     },
     {
       id: "coffeeMachine",
@@ -2627,7 +2834,7 @@ function getUpgradeDefinitions() {
 }
 
 function getUpgradeCost(type) {
-  if (type === "tables") return Math.round(260 + (state.upgrades.tables - 2) * 210);
+  if (type === "tables") return Math.round(260 + (getSeatCount() - 2) * 210);
   if (type === "coffeeMachine") return Math.round(360 * Math.pow(state.upgrades.coffeeMachine, 1.38));
   if (type === "oven") return Math.round(340 * Math.pow(state.upgrades.oven, 1.36));
   if (type === "blender") return Math.round(360 * Math.pow(state.upgrades.blender, 1.36));
@@ -2702,20 +2909,23 @@ function getXpToNextLevel(level) {
 }
 
 function getTablePositions(count) {
-  const rows = count <= 3 ? 1 : count <= 6 ? 2 : 3;
-  const cols = Math.ceil(count / rows);
+  const seatCount = normalizeSeatCount(count);
+  const cols = seatCount <= 2 ? seatCount : seatCount <= 4 ? 2 : seatCount <= 6 ? 3 : 4;
+  const rows = Math.ceil(seatCount / cols);
   const positions = [];
-  const xStart = cols === 1 ? 50 : 28;
-  const xEnd = cols === 1 ? 50 : 76;
-  const yStart = rows === 1 ? 72 : rows === 2 ? 62 : 56;
-  const yEnd = rows === 1 ? 72 : rows === 2 ? 80 : 84;
+  const xStart = cols === 1 ? 55 : cols === 2 ? 38 : cols === 3 ? 33 : 31;
+  const xEnd = cols === 1 ? 55 : cols === 2 ? 72 : cols === 3 ? 80 : 84;
+  const yStart = rows === 1 ? 73 : 72;
+  const yEnd = rows === 1 ? 73 : 87;
 
-  for (let index = 0; index < count; index += 1) {
+  for (let index = 0; index < seatCount; index += 1) {
     const row = Math.floor(index / cols);
     const col = index % cols;
+    const itemsInRow = row === rows - 1 ? seatCount - row * cols : cols;
+    const rowOffset = itemsInRow < cols ? ((cols - itemsInRow) / 2) * ((xEnd - xStart) / Math.max(1, cols - 1)) : 0;
     const x = cols === 1 ? 50 : xStart + ((xEnd - xStart) * col) / Math.max(1, cols - 1);
     const y = rows === 1 ? yStart : yStart + ((yEnd - yStart) * row) / Math.max(1, rows - 1);
-    positions.push({ x, y });
+    positions.push({ x: x + rowOffset, y });
   }
   return positions;
 }
@@ -2841,6 +3051,10 @@ function sanitizeInteger(value, fallback, min) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
   return Math.max(min, Math.floor(number));
+}
+
+function normalizeSeatCount(value) {
+  return clamp(Math.floor(Number(value) || DEFAULT_STATE.upgrades.tables), 2, MAX_TABLES);
 }
 
 function sanitizeOwnedIds(value, source, fallback) {

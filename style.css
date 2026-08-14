@@ -496,7 +496,7 @@ p {
 
 .oven-machine {
   left: clamp(150px, 22%, 240px);
-  top: 29%;
+  top: 25%;
 }
 
 .blender-machine {
@@ -510,6 +510,7 @@ p {
   inset: -10px -12px -8px;
   border-radius: 999px;
   background: transparent;
+  pointer-events: none;
 }
 
 .equipment-object:focus-visible {
@@ -520,7 +521,7 @@ p {
 
 .equipment-object:active,
 .equipment-object.brewing {
-  transform: scale(1.04);
+  transform: scale(1.02);
   filter: drop-shadow(0 0 10px rgba(246, 184, 79, 0.55));
 }
 
@@ -1468,6 +1469,7 @@ p {
   inset: -8px -10px -8px;
   border-radius: 999px;
   background: transparent;
+  pointer-events: none;
 }
 
 .bakery-showcase:focus-visible {
@@ -2107,6 +2109,16 @@ p {
   background: #ead7bd;
 }
 
+.coffee-result-badge[data-quality="raw"] {
+  color: #fff;
+  background: #8f6f5b;
+}
+
+.coffee-result-badge[data-quality="overcooked"] {
+  color: #fff;
+  background: #6f4937;
+}
+
 .brew-steps {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2144,6 +2156,7 @@ p {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: rgba(255, 253, 247, 0.82);
+  align-content: start;
 }
 
 .coffee-step-panel h3 {
@@ -2229,10 +2242,24 @@ p {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   margin-top: 12px;
+  min-height: 58px;
+  align-items: stretch;
 }
 
 .mini-game-actions .primary-button {
-  min-height: 52px;
+  min-height: 56px;
+  width: 100%;
+  white-space: nowrap;
+}
+
+.mini-game-actions .secondary-button {
+  min-height: 56px;
+  white-space: nowrap;
+}
+
+.mini-game-actions .primary-button:active,
+.mini-game-actions .secondary-button:active {
+  transform: scale(0.97);
 }
 
 .mini-game-visual {
@@ -2274,7 +2301,20 @@ p {
 }
 
 .mini-game-body {
-  min-height: 154px;
+  min-height: 184px;
+}
+
+.mini-progress-readout {
+  display: grid;
+  place-items: center;
+  min-height: 30px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: var(--coffee);
+  background: rgba(230, 243, 233, 0.88);
+  font-size: 0.84rem;
+  font-weight: 900;
+  white-space: nowrap;
 }
 
 .bake-gauge,
@@ -3013,7 +3053,7 @@ p {
 
   .oven-machine {
     left: 29%;
-    top: 25.5%;
+    top: 23%;
   }
 
   .blender-machine {
@@ -3213,7 +3253,7 @@ p {
   }
 
   .mini-game-body {
-    min-height: 146px;
+    min-height: 178px;
   }
 
   .timing-gauge {
